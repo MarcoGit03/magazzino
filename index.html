@@ -469,7 +469,7 @@
           <p>Consulta e correggi quantità, ubicazione e note. Con "Esporta inventario" scarichi il file con le stesse colonne del tuo Excel.</p>
         </div>
         <div class="head-actions">
-          <div class="field" style="min-width:150px;"><label>Soglia scorta bassa</label><input class="input" id="fldSoglia" type="number" min="0" style="width:110px;"></div>
+          <div class="field" style="min-width:150px;"><label>Soglia predefinita</label><input class="input" id="fldSoglia" title="Vale per tutti i materiali senza una soglia propria (colonna Soglia)" type="number" min="0" style="width:110px;"></div>
           <button class="btn btn-primary" id="btnExportInventario">Esporta inventario</button>
           <button class="btn" id="btnLockInventario" title="Richiede di nuovo il codice per entrare nell'Inventario">Blocca</button>
         </div>
@@ -492,7 +492,7 @@
           <thead>
             <tr>
               <th>Materiale</th><th>Descrizione</th><th>Divisione</th><th>Magazzino</th><th>U.M.</th>
-              <th>Quantità</th><th>Ubicazione</th><th>Note</th><th></th>
+              <th>Quantità</th><th>Soglia</th><th>Ubicazione</th><th>Note</th><th></th>
             </tr>
           </thead>
           <tbody id="inventarioTbody"></tbody>
@@ -524,7 +524,7 @@
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M12 3v12" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 19h16" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"/></svg>
         <div><b>Trascina qui il file Excel</b> oppure</div>
         <input type="file" id="fileInput" accept=".xlsx,.xls" style="margin-top:14px;">
-        <div class="import-preview-note">Colonne riconosciute: Divisione, Materiale, Descrizione materiale, Magazzino, Unità misura di base, Utilizz. liber., Ubicazione, Note<br>(obbligatorie solo Materiale e Utilizz. liber.)</div>
+        <div class="import-preview-note">Colonne riconosciute: Divisione, Materiale, Descrizione materiale, Magazzino, Unità misura di base, Utilizz. liber., Ubicazione, Note, Soglia<br>(obbligatorie solo Materiale e Utilizz. liber.)</div>
       </div>
 
       <div id="importPreviewArea"></div>
@@ -954,14 +954,19 @@
   }
 
   /* ============ STOCK STATUS ============ */
-  function stockStatus(qty){
-    qty = Number(qty) || 0;
+  // soglia del singolo materiale, se impostata; altrimenti quella predefinita valida per tutti
+  function itemThreshold(item){
+    var t = item ? item.soglia : null;
+    return (typeof t === 'number' && isFinite(t) && t >= 0) ? t : (settings.sogliaScortaBassa || 0);
+  }
+  function stockStatus(item){
+    var qty = Number(item.quantita) || 0;
     if (qty <= 0) return 'esaurito';
-    if (qty <= (settings.sogliaScortaBassa || 0)) return 'bassa';
+    if (qty <= itemThreshold(item)) return 'bassa';
     return 'ok';
   }
-  function stockBadge(qty){
-    var st = stockStatus(qty);
+  function stockBadge(item){
+    var st = stockStatus(item);
     if (st === 'esaurito') return '<span class="badge critical">Esaurito</span>';
     if (st === 'bassa') return '<span class="badge warn">Scorta bassa</span>';
     return '<span class="badge good">Regolare</span>';
@@ -1030,7 +1035,7 @@
         '<td class="cell-muted">' + esc(item.divisione) + '</td>' +
         '<td class="cell-muted">' + esc(item.magazzino) + '</td>' +
         '<td class="cell-muted">' + esc(item.ubicazione) + '</td>' +
-        '<td class="mono">' + fmtNum(item.quantita) + ' <span class="cell-muted">' + esc(item.um) + '</span> ' + stockBadge(item.quantita) + '</td>' +
+        '<td class="mono">' + fmtNum(item.quantita) + ' <span class="cell-muted">' + esc(item.um) + '</span> ' + stockBadge(item) + '</td>' +
         '<td><button class="btn btn-sm btn-primary" data-add="' + esc(item.id) + '">+ Aggiungi</button></td>' +
       '</tr>';
     }).join('') + (total > PRELEVA_LIMIT ? '<tr><td colspan="7" class="cell-muted">Mostrati i primi ' + PRELEVA_LIMIT + ' di ' + total + ' risultati: restringi la ricerca.</td></tr>' : '');
@@ -1414,8 +1419,8 @@
   function renderInventario(){
     var statsEl = document.getElementById('inventarioStats');
     var all = Array.from(inventario.values());
-    var esauriti = all.filter(function(i){ return stockStatus(i.quantita) === 'esaurito'; }).length;
-    var bassi = all.filter(function(i){ return stockStatus(i.quantita) === 'bassa'; }).length;
+    var esauriti = all.filter(function(i){ return stockStatus(i) === 'esaurito'; }).length;
+    var bassi = all.filter(function(i){ return stockStatus(i) === 'bassa'; }).length;
     statsEl.innerHTML =
       '<div class="stat-tile"><div class="n mono">' + all.length + '</div><div class="l">Righe a inventario</div></div>' +
       '<div class="stat-tile"><div class="n mono">' + bassi + '</div><div class="l">In scorta bassa</div></div>' +
@@ -1424,19 +1429,19 @@
 
     var tbody = document.getElementById('inventarioTbody');
     if (!dbAvailable){
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><b>Database non connesso</b></div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><b>Database non connesso</b></div></td></tr>';
       return;
     }
     var q = document.getElementById('invSearchInput').value;
     var stato = document.getElementById('invFilterStato').value;
     var rows = all.filter(function(item){
-      if (stato && stockStatus(item.quantita) !== stato) return false;
+      if (stato && stockStatus(item) !== stato) return false;
       if (!q.trim()) return true;
       return matchTokens(matOf(item) + ' ' + (item.descrizione || '') + ' ' + (item.ubicazione || '') + ' ' + (item.note || ''), q);
     }).sort(cmpMateriale);
 
     if (rows.length === 0){
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><b>' + (all.length ? 'Nessun risultato' : 'Inventario vuoto') + '</b>' + (all.length ? '' : 'Importa il file Excel dalla sezione "Importa dati".') + '</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><b>' + (all.length ? 'Nessun risultato' : 'Inventario vuoto') + '</b>' + (all.length ? '' : 'Importa il file Excel dalla sezione "Importa dati".') + '</div></td></tr>';
       return;
     }
     var total = rows.length;
@@ -1448,12 +1453,13 @@
         '<td class="cell-muted">' + esc(item.divisione) + '</td>' +
         '<td class="cell-muted">' + esc(item.magazzino) + '</td>' +
         '<td class="cell-muted">' + esc(item.um) + '</td>' +
-        '<td class="mono editable-cell" data-edit="quantita" data-id="' + esc(item.id) + '">' + fmtNum(item.quantita) + ' ' + stockBadge(item.quantita) + '</td>' +
+        '<td class="mono editable-cell" data-edit="quantita" data-id="' + esc(item.id) + '">' + fmtNum(item.quantita) + ' ' + stockBadge(item) + '</td>' +
+        '<td class="mono editable-cell" data-edit="soglia" data-id="' + esc(item.id) + '">' + (typeof item.soglia === 'number' ? fmtNum(item.soglia) : '<span class="cell-muted">predef. ' + fmtNum(settings.sogliaScortaBassa) + '</span>') + '</td>' +
         '<td class="editable-cell" data-edit="ubicazione" data-id="' + esc(item.id) + '">' + (item.ubicazione ? esc(item.ubicazione) : '<span class="cell-muted">+ ubicazione</span>') + '</td>' +
         '<td class="cell-note editable-cell" data-edit="note" data-id="' + esc(item.id) + '">' + (item.note ? esc(item.note) : '<span class="cell-muted">+ nota</span>') + '</td>' +
         '<td><button class="btn btn-sm" data-hist="' + esc(item.id) + '">Storico</button></td>' +
       '</tr>';
-    }).join('') + (total > INV_LIMIT ? '<tr><td colspan="9" class="cell-muted">Mostrate le prime ' + INV_LIMIT + ' righe di ' + total + ': restringi la ricerca.</td></tr>' : '');
+    }).join('') + (total > INV_LIMIT ? '<tr><td colspan="10" class="cell-muted">Mostrate le prime ' + INV_LIMIT + ' righe di ' + total + ': restringi la ricerca.</td></tr>' : '');
     tbody.querySelectorAll('[data-edit]').forEach(function(cell){
       cell.addEventListener('click', function(){ openEditModal(cell.getAttribute('data-id'), cell.getAttribute('data-edit')); });
     });
@@ -1463,7 +1469,7 @@
   }
 
   // Esporta l'inventario con le STESSE colonne del file di lavoro, così si può rimettere sul PC
-  var INVENTARIO_COLS = ['Divisione', 'Materiale', 'Descrizione materiale', 'Magazzino', 'Unità misura di base', 'Utilizz. liber.', 'Ubicazione', 'Note'];
+  var INVENTARIO_COLS = ['Divisione', 'Materiale', 'Descrizione materiale', 'Magazzino', 'Unità misura di base', 'Utilizz. liber.', 'Ubicazione', 'Note', 'Soglia'];
 
   function buildInventarioWorkbook(){
     var rows = Array.from(inventario.values()).sort(cmpMateriale).map(function(i){
@@ -1472,11 +1478,12 @@
       return {
         'Divisione': i.divisione || '', 'Materiale': mat, 'Descrizione materiale': i.descrizione || '',
         'Magazzino': i.magazzino || '', 'Unità misura di base': i.um || '', 'Utilizz. liber.': Number(i.quantita) || 0,
-        'Ubicazione': i.ubicazione || '', 'Note': i.note || ''
+        'Ubicazione': i.ubicazione || '', 'Note': i.note || '',
+        'Soglia': (typeof i.soglia === 'number') ? i.soglia : ''      // vuota = usa la soglia predefinita
       };
     });
     var ws = XLSX.utils.json_to_sheet(rows, { header: INVENTARIO_COLS });
-    ws['!cols'] = [{wch:10},{wch:16},{wch:44},{wch:11},{wch:12},{wch:14},{wch:16},{wch:44}];
+    ws['!cols'] = [{wch:10},{wch:16},{wch:44},{wch:11},{wch:12},{wch:14},{wch:16},{wch:44},{wch:9}];
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
     return { data: XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), count: rows.length };
@@ -1492,39 +1499,46 @@
   function openEditModal(itemId, field){
     var item = inventario.get(itemId);
     if (!item) return;
-    var labels = { quantita: 'Quantità', ubicazione: 'Ubicazione', note: 'Nota' };
-    var isNumber = field === 'quantita';
-    var currentVal = item[field] || (isNumber ? 0 : '');
+    var labels = { quantita: 'Quantità', ubicazione: 'Ubicazione', note: 'Nota', soglia: 'Soglia scorta bassa' };
+    var isNumber = field === 'quantita' || field === 'soglia';
+    var isSoglia = field === 'soglia';
+    var currentVal = (item[field] === undefined || item[field] === null) ? (field === 'quantita' ? 0 : '') : item[field];
     var inputHtml = field === 'note'
       ? '<textarea class="input" id="editVal">' + esc(currentVal) + '</textarea>'
-      : '<input class="input" id="editVal" type="' + (isNumber ? 'number' : 'text') + '"' + (isNumber ? ' step="any"' : '') + ' value="' + esc(currentVal) + '">';
+      : '<input class="input" id="editVal" type="' + (isNumber ? 'number' : 'text') + '"' + (isNumber ? ' step="any" min="0"' : '') +
+        (isSoglia ? ' placeholder="vuoto = soglia predefinita (' + fmtNum(settings.sogliaScortaBassa) + ')"' : '') + ' value="' + esc(currentVal) + '">';
     var html = '<h3>Modifica ' + labels[field] + '</h3>' +
       '<p class="sub mono">' + esc(matOf(item)) + ' &middot; ' + esc(item.descrizione) + '</p>' +
+      (isSoglia ? '<p class="sub">Sotto questa quantità (compresa) il materiale risulta in "scorta bassa". Lascia vuoto per usare la soglia predefinita; con 0 non compare mai l\'avviso di scorta bassa.</p>' : '') +
       '<div class="modal-fields">' +
         '<div class="field"><label>' + labels[field] + '</label>' + inputHtml + '</div>' +
-        '<div class="field"><label>Il tuo nome (per il log modifiche) *</label><input class="input" id="editOperatore" type="text" placeholder="Chi effettua la modifica"></div>' +
       '</div>' +
       '<div class="modal-actions"><button class="btn" id="mCancel">Annulla</button><button class="btn btn-primary" id="mSave">Salva</button></div>';
     var overlay = openModal(html);
     overlay.querySelector('#mCancel').addEventListener('click', closeModal);
-    overlay.querySelector('#editVal').focus();
+    var editInput = overlay.querySelector('#editVal');
+    editInput.focus();
+    if (field !== 'note') editInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') overlay.querySelector('#mSave').click(); });
     overlay.querySelector('#mSave').addEventListener('click', function(){
       var newVal = overlay.querySelector('#editVal').value;
-      var operatore = overlay.querySelector('#editOperatore').value.trim();
-      if (!operatore){ toast('Indica chi effettua la modifica', 'err'); return; }
       if (isNumber){
-        newVal = parseQty(newVal);
-        if (newVal === null || newVal < 0){ toast('Quantità non valida', 'err'); return; }
+        if (isSoglia && !String(newVal).trim()){
+          newVal = null;                                       // soglia vuota = torna alla predefinita
+        } else {
+          newVal = parseQty(newVal);
+          if (newVal === null || newVal < 0){ toast(isSoglia ? 'Soglia non valida' : 'Quantità non valida', 'err'); return; }
+        }
       } else {
         newVal = newVal.trim();
       }
-      if (String(newVal) === String(currentVal)){ closeModal(); return; }
+      if (String(newVal === null ? '' : newVal) === String(currentVal)){ closeModal(); return; }
       var now = todayISO();
       inventoryTransaction([bucketOf(itemId)], function(items){
         var it = items[bucketOf(itemId)][itemId];
         if (!it){ var e = new Error('missing'); e.code = 'missing'; throw e; }
         var storico = Array.isArray(it.storicoModifiche) ? it.storicoModifiche.slice(-19) : [];
-        storico.push({ campo: field, vecchio: it[field] || (isNumber ? 0 : ''), nuovo: newVal, operatore: operatore, dataOra: now });
+        var old = (it[field] === undefined || it[field] === null) ? (field === 'quantita' ? 0 : '') : it[field];
+        storico.push({ campo: field, vecchio: old, nuovo: newVal === null ? '' : newVal, operatore: '', dataOra: now });
         it[field] = newVal;
         it.storicoModifiche = storico;
         it.aggiornatoIl = now;
@@ -1542,12 +1556,12 @@
     var item = inventario.get(itemId);
     if (!item) return;
     var hist = (item.storicoModifiche || []).slice().reverse();
-    var labels = { quantita: 'Quantità', ubicazione: 'Ubicazione', note: 'Nota' };
+    var labels = { quantita: 'Quantità', ubicazione: 'Ubicazione', note: 'Nota', soglia: 'Soglia' };
     var html = '<h3>Storico modifiche</h3>' +
       '<p class="sub mono">' + esc(matOf(item)) + ' &middot; ' + esc(item.descrizione) + '</p>' +
       (hist.length === 0 ? '<p class="sub">Nessuna modifica manuale registrata.</p>' :
         '<ul class="hist-list">' + hist.map(function(h){
-          return '<li><b>' + esc(labels[h.campo] || h.campo) + '</b>: "' + esc(h.vecchio) + '" &rarr; "' + esc(h.nuovo) + '" — ' + esc(h.operatore) + ', ' + fmtDateTime(h.dataOra) + '</li>';
+          return '<li><b>' + esc(labels[h.campo] || h.campo) + '</b>: "' + esc(h.vecchio) + '" &rarr; "' + esc(h.nuovo) + '" — ' + (h.operatore ? esc(h.operatore) + ', ' : '') + fmtDateTime(h.dataOra) + '</li>';
         }).join('') + '</ul>') +
       '<div class="modal-actions"><button class="btn btn-primary" id="mClose">Chiudi</button></div>';
     var overlay = openModal(html);
@@ -1568,7 +1582,8 @@
     'utilizz liber': 'quantita', 'utilizz libero': 'quantita', 'utilizzo libero': 'quantita',
     'quantita utilizzo libero': 'quantita', 'quantita': 'quantita', 'qta': 'quantita', 'qty': 'quantita',
     'ubicazione': 'ubicazione', 'ubicazioni': 'ubicazione',
-    'note': 'note', 'nota': 'note', 'annotazioni': 'note'
+    'note': 'note', 'nota': 'note', 'annotazioni': 'note',
+    'soglia': 'soglia', 'soglia scorta': 'soglia', 'soglia scorta bassa': 'soglia', 'soglia minima': 'soglia', 'scorta minima': 'soglia'
   };
   var pendingImport = null;   // { rows, fields, fileName, sheetName, scartate, scartateQty }
 
@@ -1633,24 +1648,30 @@
   }
 
   function buildRows(aoa, headerIdx, m, sheetName){
-    var rows = [], scartate = 0, scartateQty = 0;
+    var rows = [], scartate = 0, scartateQty = 0, scartateSoglia = 0;
     var idxs = Object.keys(m.byIndex);
     for (var i = headerIdx + 1; i < aoa.length; i++){
       var line = aoa[i];
-      var o = { divisione: '', materiale: '', descrizione: '', magazzino: '', um: '', quantita: null, ubicazione: '', note: '' };
-      var any = false;
+      var o = { divisione: '', materiale: '', descrizione: '', magazzino: '', um: '', quantita: null, ubicazione: '', note: '', soglia: null };
+      var any = false, badSoglia = false;
       for (var k = 0; k < idxs.length; k++){
         var f = m.byIndex[idxs[k]], v = line[idxs[k]];
         if (v !== '' && v != null) any = true;
         if (f === 'quantita') o.quantita = parseQty(v);
+        else if (f === 'soglia'){
+          var sv = parseQty(v);
+          if (String(v == null ? '' : v).trim() !== '' && (sv === null || sv < 0)){ badSoglia = true; sv = null; }
+          o.soglia = sv;
+        }
         else o[f] = String(v == null ? '' : v).trim();
       }
       if (!any) continue;                              // riga vuota
       if (!o.materiale){ scartate++; continue; }        // righe di totale / senza materiale
       if (o.quantita === null){ scartateQty++; continue; }
+      if (badSoglia) scartateSoglia++;
       rows.push(o);
     }
-    return { rows: rows, fields: m.fields, sheetName: sheetName, scartate: scartate, scartateQty: scartateQty };
+    return { rows: rows, fields: m.fields, sheetName: sheetName, scartate: scartate, scartateQty: scartateQty, scartateSoglia: scartateSoglia };
   }
 
   /* Confronta le righe del file con l'inventario attuale e prepara le operazioni.
@@ -1659,7 +1680,7 @@
      - una riga si riconosce da Divisione + Materiale + Magazzino, quindi cambiare ubicazione o nota
        sul PC aggiorna la riga esistente */
   function buildImportPlan(rows, fields){
-    var hasUb = fields.indexOf('ubicazione') !== -1, hasNote = fields.indexOf('note') !== -1;
+    var hasUb = fields.indexOf('ubicazione') !== -1, hasNote = fields.indexOf('note') !== -1, hasSoglia = fields.indexOf('soglia') !== -1;
     var existingByKey = new Map();
     inventario.forEach(function(it){
       var k = keyOf(it.divisione, matOf(it), it.magazzino);
@@ -1679,7 +1700,7 @@
     inventario.forEach(function(it){ usedIds.add(it.id); });
     var pairedIds = new Set();
     var ops = [];
-    var st = { nuove: 0, aggiornate: 0, invariate: 0, noteImport: 0, noteSostituite: 0, ubicAgg: 0, duplicati: 0, ambigui: 0 };
+    var st = { nuove: 0, aggiornate: 0, invariate: 0, noteImport: 0, noteSostituite: 0, ubicAgg: 0, sogliaAgg: 0, duplicati: 0, ambigui: 0 };
 
     groups.forEach(function(rs, k){
       if (rs.length > 1){
@@ -1708,13 +1729,15 @@
         var prev = assigned[idx] || null;
         var prevUb = prev ? (prev.ubicazione || '') : '';
         var prevNote = prev ? (prev.note || '') : '';
+        var prevSoglia = (prev && typeof prev.soglia === 'number') ? prev.soglia : null;
         var next = {
           materiale: r.materiale, divisione: r.divisione, magazzino: r.magazzino,
           descrizione: r.descrizione || (prev ? (prev.descrizione || '') : ''),
           um: r.um || (prev ? (prev.um || '') : ''),
           quantita: r.quantita,
           ubicazione: (hasUb && r.ubicazione) ? r.ubicazione : prevUb,
-          note: (hasNote && r.note) ? r.note : prevNote
+          note: (hasNote && r.note) ? r.note : prevNote,
+          soglia: (hasSoglia && r.soglia !== null) ? r.soglia : prevSoglia
         };
         if (!prev){
           var id = makeItemId(r.divisione, r.materiale, r.magazzino);
@@ -1724,6 +1747,7 @@
           st.nuove++;
           if (next.note) st.noteImport++;
           if (next.ubicazione) st.ubicAgg++;
+          if (next.soglia !== null) st.sogliaAgg++;
           return;
         }
         pairedIds.add(prev.id);
@@ -1733,19 +1757,21 @@
           if (before !== next[f]) patch[f] = next[f];
         });
         if (Number(prev.quantita) !== next.quantita) patch.quantita = next.quantita;
-        var noteChanged = ('note' in patch), ubChanged = ('ubicazione' in patch);
+        if (prevSoglia !== next.soglia) patch.soglia = next.soglia;
+        var noteChanged = ('note' in patch), ubChanged = ('ubicazione' in patch), sogliaChanged = ('soglia' in patch);
         var changed = Object.keys(patch).length > 0;
         if (noteChanged){ st.noteImport++; if (prevNote) st.noteSostituite++; }
         if (ubChanged) st.ubicAgg++;
+        if (sogliaChanged) st.sogliaAgg++;
         if (changed) st.aggiornate++; else st.invariate++;
         ops.push({ id: prev.id, isNew: false, next: next, patch: patch, changed: changed,
-                   noteChanged: noteChanged, ubChanged: ubChanged, prevNote: prevNote, prevUb: prevUb });
+                   noteChanged: noteChanged, ubChanged: ubChanged, sogliaChanged: sogliaChanged, prevNote: prevNote, prevUb: prevUb, prevSoglia: prevSoglia });
       });
     });
 
     var absent = [];
     inventario.forEach(function(it){ if (!pairedIds.has(it.id)) absent.push(it); });
-    return { ops: ops, absent: absent, stats: st, hasUb: hasUb, hasNote: hasNote };
+    return { ops: ops, absent: absent, stats: st, hasUb: hasUb, hasNote: hasNote, hasSoglia: hasSoglia };
   }
 
   function renderImportPreview(){
@@ -1760,6 +1786,9 @@
     else items.push('<li>Il file non ha la colonna <i>note</i>: le note già scritte nell\'app restano invariate.</li>');
     if (plan.hasUb) items.push('<li>Ubicazioni impostate/aggiornate dal file: <b>' + st.ubicAgg + '</b>.</li>');
     else items.push('<li>Il file non ha la colonna <i>ubicazione</i>: le ubicazioni già presenti nell\'app restano invariate.</li>');
+    if (plan.hasSoglia) items.push('<li>Soglie di scorta bassa impostate/aggiornate dal file: <b>' + st.sogliaAgg + '</b> (celle vuote = soglia invariata).</li>');
+    else items.push('<li>Il file non ha la colonna <i>Soglia</i>: le soglie già impostate nell\'app restano invariate.</li>');
+    if (pi.scartateSoglia) items.push('<li class="warn">' + pi.scartateSoglia + ' valori di Soglia non leggibili o negativi ignorati.</li>');
     if (plan.absent.length) items.push('<li class="warn">' + plan.absent.length + ' righe presenti nell\'app non compaiono nel file (con l\'opzione qui sotto puoi azzerarne la quantità).</li>');
     if (st.duplicati) items.push('<li>' + st.duplicati + ' materiali compaiono su più righe (stessa Divisione e Magazzino): le righe restano separate e vengono abbinate a quelle dell\'app per ubicazione.</li>');
     if (st.ambigui) items.push('<li class="warn">In ' + st.ambigui + ' di questi le righe ripetute non hanno ubicazioni diverse e compilate: l\'abbinamento segue solo l\'ordine del file, quindi le quantità potrebbero finire scambiate tra le righe. Compila l\'ubicazione su tutte le righe ripetute.</li>');
@@ -1826,6 +1855,7 @@
           var storico = Array.isArray(cur.storicoModifiche) ? cur.storicoModifiche.slice(-17) : [];
           if (op.noteChanged) storico.push({ campo: 'note', vecchio: op.prevNote, nuovo: op.next.note, operatore: 'Import da file', dataOra: now });
           if (op.ubChanged) storico.push({ campo: 'ubicazione', vecchio: op.prevUb, nuovo: op.next.ubicazione, operatore: 'Import da file', dataOra: now });
+          if (op.sogliaChanged) storico.push({ campo: 'soglia', vecchio: op.prevSoglia === null ? '' : op.prevSoglia, nuovo: op.next.soglia === null ? '' : op.next.soglia, operatore: 'Import da file', dataOra: now });
           mine[op.id] = Object.assign({}, cur, op.patch, { storicoModifiche: storico, aggiornatoIl: now });
         });
         sp.zero.forEach(function(id){
