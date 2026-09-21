@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magazzino</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<style>
+  :root{
+    --paper:#F3F5F1;
+    --paper-2:#E8EBE4;
+    --paper-3:#D9DDD3;
+    --ink:#1B201C;
+    --ink-soft:#565E58;
+    --ink-faint:#8B928A;
+    --accent:#2557A7;
+    --accent-ink:#1C4482;
+    --accent-soft:#DFE8F5;
+    --good:#2F8F5B;
+    --good-soft:#DFEEE4;
+    --warn:#B8791E;
+    --warn-soft:#F5E8D2;
+    --critical:#BC3A2E;
+    --critical-soft:#F5DEDA;
+    --line:#D6DAD0;
+    --white:#FFFFFF;
+    --shadow: 0 1px 0 rgba(20,25,20,.04), 0 6px 16px -10px rgba(20,25,20,.25);
+    --shadow-lg: 0 10px 30px -8px rgba(20,25,20,.35);
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#141815;
+      --paper-2:#1B211D;
+      --paper-3:#2A322B;
+      --ink:#E9EDE7;
+      --ink-soft:#A3AC9F;
+      --ink-faint:#727B70;
+      --accent:#6D9BE0;
+      --accent-ink:#8FB4EC;
+      --accent-soft:#1F2E45;
+      --good:#5CBE84;
+      --good-soft:#1C3327;
+      --warn:#E3AC5C;
+      --warn-soft:#3A2C18;
+      --critical:#E6867A;
+      --critical-soft:#3C2320;
+      --line:#313A32;
+      --white:#1E241F;
+      --shadow: 0 1px 0 rgba(0,0,0,.3), 0 10px 24px -12px rgba(0,0,0,.6);
+      --shadow-lg: 0 16px 40px -10px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#141815; --paper-2:#1B211D; --paper-3:#2A322B;
+    --ink:#E9EDE7; --ink-soft:#A3AC9F; --ink-faint:#727B70;
+    --accent:#6D9BE0; --accent-ink:#8FB4EC; --accent-soft:#1F2E45;
+    --good:#5CBE84; --good-soft:#1C3327;
+    --warn:#E3AC5C; --warn-soft:#3A2C18;
+    --critical:#E6867A; --critical-soft:#3C2320;
+    --line:#313A32; --white:#1E241F;
+    --shadow: 0 1px 0 rgba(0,0,0,.3), 0 10px 24px -12px rgba(0,0,0,.6);
+    --shadow-lg: 0 16px 40px -10px rgba(0,0,0,.7);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Archivo',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  .mono{ font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums; }
+  button{ font-family:inherit; }
+  input, select, textarea{ font-family:inherit; }
+  ::selection{ background:var(--accent-soft); }
+
+  /* ============ PIN GATE ============ */
+  .pin-gate{
+    position:fixed; inset:0; z-index:100;
+    background:var(--paper);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pin-card{
+    width:min(340px, 90vw);
+    background:var(--paper-2); border:1px solid var(--line); border-radius:16px;
+    padding:36px 32px; box-shadow:var(--shadow-lg);
+    text-align:center;
+  }
+  .pin-mark{
+    width:52px; height:52px; border-radius:14px; background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center; margin:0 auto 18px;
+  }
+  .pin-card h1{ font-size:1.3rem; font-weight:700; margin:0 0 4px; }
+  .pin-card p{ color:var(--ink-soft); font-size:.9rem; margin:0 0 22px; }
+  .pin-dots{ display:flex; gap:12px; justify-content:center; margin-bottom:20px; }
+  .pin-dot{
+    width:16px; height:16px; border-radius:50%; border:2px solid var(--line);
+    background:var(--paper); transition:all .15s ease;
+  }
+  .pin-dot.filled{ background:var(--accent); border-color:var(--accent); }
+  .pin-keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px; }
+  .pin-key{
+    padding:14px 0; border-radius:10px; border:1px solid var(--line); background:var(--paper);
+    color:var(--ink); font-size:1.15rem; font-weight:600; cursor:pointer; font-family:'JetBrains Mono',monospace;
+  }
+  .pin-key:active{ background:var(--paper-3); }
+  .pin-key.wide{ font-family:'Archivo',sans-serif; font-size:.85rem; font-weight:600; color:var(--ink-soft); }
+  .pin-error{ color:var(--critical); font-size:.85rem; font-weight:600; margin-top:4px; min-height:1.2em; }
+
+  /* ============ APP SHELL ============ */
+  .app{ display:flex; height:100vh; }
+  .sidebar{
+    width:220px; flex:0 0 auto; background:var(--paper-2); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:20px 14px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; padding:0 8px 22px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:9px; background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .brand-text{ line-height:1.2; }
+  .brand-text b{ display:block; font-size:1rem; font-weight:700; }
+  .brand-text span{ display:block; font-size:.7rem; color:var(--ink-faint); letter-spacing:.04em; }
+
+  nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px; text-align:left;
+    padding:10px 12px; border-radius:9px; border:none; background:transparent;
+    color:var(--ink-soft); font-size:.9rem; font-weight:600; cursor:pointer;
+  }
+  .nav-item:hover{ background:var(--paper-3); color:var(--ink); }
+  .nav-item.active{ background:var(--accent); color:#fff; }
+  .nav-item svg{ flex:0 0 auto; opacity:.9; }
+  .nav-badge{
+    margin-left:auto; background:var(--critical); color:#fff; font-size:.68rem; font-weight:700;
+    border-radius:999px; padding:1px 7px; font-family:'JetBrains Mono',monospace;
+  }
+  .nav-item.active .nav-badge{ background:rgba(255,255,255,.28); }
+
+  .sync-status{
+    display:flex; align-items:center; gap:8px; padding:10px 12px; font-size:.76rem; color:var(--ink-faint);
+    border-top:1px solid var(--line); margin-top:10px;
+  }
+  .sync-dot{ width:8px; height:8px; border-radius:50%; background:var(--ink-faint); flex:0 0 auto; }
+  .sync-dot.ok{ background:var(--good); }
+  .sync-dot.bad{ background:var(--critical); }
+
+  .main{ flex:1; overflow-y:auto; padding:26px 30px 60px; }
+  .screen{ display:none; max-width:1180px; }
+  .screen.active{ display:block; }
+
+  .page-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+  .page-head h2{ font-size:1.4rem; font-weight:700; margin:0 0 4px; }
+  .page-head p{ margin:0; color:var(--ink-soft); font-size:.88rem; }
+  .head-actions{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+
+  /* ============ BUTTONS / INPUTS ============ */
+  .btn{
+    display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border-radius:9px;
+    border:1px solid var(--line); background:var(--paper-2); color:var(--ink);
+    font-size:.85rem; font-weight:600; cursor:pointer; white-space:nowrap;
+  }
+  .btn:hover{ background:var(--paper-3); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-ink); }
+  .btn-danger{ background:var(--critical-soft); border-color:var(--critical-soft); color:var(--critical); }
+  .btn-sm{ padding:6px 11px; font-size:.78rem; }
+  .btn-icon{ padding:7px; }
+
+  .field{ margin-bottom:0; }
+  .field label{ display:block; font-size:.72rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:5px; }
+  .input, select.input, textarea.input{
+    width:100%; padding:9px 11px; border-radius:8px; border:1px solid var(--line);
+    background:var(--white); color:var(--ink); font-size:.88rem;
+  }
+  .input:focus, select.input:focus, textarea.input:focus{ outline:2px solid var(--accent-soft); border-color:var(--accent); }
+  textarea.input{ resize:vertical; min-height:44px; }
+
+  /* ============ CARDS / PANELS ============ */
+  .card{ background:var(--paper-2); border:1px solid var(--line); border-radius:var(--radius); }
+  .stat-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .stat-tile{ background:var(--paper-2); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; }
+  .stat-tile .n{ font-family:'JetBrains Mono',monospace; font-size:1.5rem; font-weight:700; line-height:1; }
+  .stat-tile .l{ font-size:.76rem; color:var(--ink-soft); margin-top:5px; }
+
+  /* ============ SEARCH + TABLE ============ */
+  .search-row{ display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .search-row .input{ flex:1 1 260px; }
+  .search-row select.input{ flex:0 1 170px; }
+
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--white); }
+  table.dt{ width:100%; border-collapse:collapse; font-size:.85rem; }
+  table.dt thead th{
+    text-align:left; font-size:.68rem; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint);
+    font-weight:700; padding:10px 12px; border-bottom:1px solid var(--line); background:var(--paper-2);
+    white-space:nowrap; position:sticky; top:0;
+  }
+  table.dt tbody td{ padding:9px 12px; border-bottom:1px solid var(--paper-3); vertical-align:middle; }
+  table.dt tbody tr:last-child td{ border-bottom:none; }
+  table.dt tbody tr:hover{ background:var(--paper-2); }
+  .cell-muted{ color:var(--ink-faint); }
+  .cell-desc{ max-width:280px; }
+  .cell-note{ max-width:280px; white-space:pre-wrap; overflow-wrap:anywhere; }
+
+  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .badge::before{ content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .badge.good{ background:var(--good-soft); color:var(--good); }
+  .badge.warn{ background:var(--warn-soft); color:var(--warn); }
+  .badge.critical{ background:var(--critical-soft); color:var(--critical); }
+  .badge.neutral{ background:var(--paper-3); color:var(--ink-soft); }
+
+  .empty-state{ padding:50px 20px; text-align:center; color:var(--ink-faint); }
+  .empty-state svg{ margin-bottom:10px; opacity:.5; }
+  .empty-state b{ display:block; color:var(--ink-soft); font-size:.95rem; margin-bottom:4px; }
+
+  /* ============ PRELEVA LAYOUT ============ */
+  .preleva-grid{ display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start; }
+  .cart-panel{ position:sticky; top:0; background:var(--paper-2); border:1px solid var(--line); border-radius:var(--radius); padding:16px; }
+  .cart-panel h3{ margin:0 0 12px; font-size:.95rem; display:flex; align-items:center; justify-content:space-between; }
+  .cart-count{ font-family:'JetBrains Mono',monospace; background:var(--accent-soft); color:var(--accent-ink); border-radius:999px; padding:1px 9px; font-size:.75rem; font-weight:700; }
+  .cart-line{ background:var(--white); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+  .cart-line-top{ display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+  .cart-line-cat{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:.82rem; }
+  .cart-line-desc{ font-size:.78rem; color:var(--ink-soft); margin-top:2px; }
+  .cart-line-meta{ font-size:.74rem; color:var(--ink-faint); margin-top:4px; }
+  .cart-remove{ background:none; border:none; color:var(--ink-faint); cursor:pointer; font-size:1rem; line-height:1; padding:2px; }
+  .cart-remove:hover{ color:var(--critical); }
+  .cart-empty{ text-align:center; color:var(--ink-faint); font-size:.85rem; padding:26px 10px; }
+  .cart-fields{ display:flex; flex-direction:column; gap:10px; margin:14px 0; }
+  .cart-total{ font-size:.78rem; color:var(--ink-soft); margin:10px 0; }
+
+  /* ============ MODAL ============ */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(15,18,15,.45); display:flex; align-items:center; justify-content:center;
+    z-index:200; padding:20px;
+  }
+  .modal{
+    width:min(420px, 100%); background:var(--paper); border-radius:14px; border:1px solid var(--line);
+    box-shadow:var(--shadow-lg); padding:22px 24px; max-height:90vh; overflow-y:auto;
+  }
+  .modal h3{ margin:0 0 4px; font-size:1.05rem; }
+  .modal .sub{ color:var(--ink-soft); font-size:.82rem; margin:0 0 16px; }
+  .modal-fields{ display:flex; flex-direction:column; gap:12px; margin-bottom:18px; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; }
+
+  .toast-wrap{ position:fixed; bottom:20px; right:20px; z-index:300; display:flex; flex-direction:column; gap:8px; }
+  .toast{
+    background:var(--ink); color:var(--paper); padding:11px 16px; border-radius:9px; font-size:.85rem;
+    box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:8px; max-width:340px;
+  }
+  .toast.err{ background:var(--critical); color:#fff; }
+  .toast.ok{ background:var(--good); color:#fff; }
+
+  .row-actions{ display:flex; gap:6px; }
+  .editable-cell{ cursor:pointer; border-bottom:1px dashed var(--ink-faint); }
+  .editable-cell:hover{ color:var(--accent-ink); }
+
+  .filters-bar{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:flex-end; }
+  .filters-bar .field{ min-width:150px; }
+
+  .import-drop{
+    border:2px dashed var(--line); border-radius:14px; padding:40px 24px; text-align:center;
+    background:var(--paper-2); margin-bottom:20px;
+  }
+  .import-drop svg{ opacity:.5; margin-bottom:10px; }
+  .import-preview-note{ font-size:.82rem; color:var(--ink-soft); margin-top:10px; }
+  .import-opts{ display:flex; flex-direction:column; gap:8px; margin:14px 0; font-size:.85rem; }
+  .import-opts label{ display:flex; gap:8px; align-items:flex-start; cursor:pointer; }
+  .import-list{ margin:0 0 14px; padding-left:18px; font-size:.84rem; color:var(--ink-soft); }
+  .import-list li{ margin-bottom:4px; }
+  .import-list li.warn{ color:var(--warn); font-weight:600; }
+  .import-list li.bad{ color:var(--critical); font-weight:600; }
+  .flow-note{ background:var(--accent-soft); color:var(--accent-ink); border-radius:var(--radius); padding:12px 16px; font-size:.84rem; margin-bottom:16px; line-height:1.5; }
+  .list-note{ font-size:.78rem; color:var(--ink-faint); margin:-6px 0 12px; }
+
+  .note-icon{ color:var(--accent); cursor:help; }
+  .hist-list{ font-size:.78rem; color:var(--ink-soft); }
+  .hist-list li{ margin-bottom:4px; }
+
+  @media (max-width: 980px){
+    .preleva-grid{ grid-template-columns:1fr; }
+    .cart-panel{ position:static; }
+  }
+  @media (max-width: 760px){
+    .sidebar{ width:76px; padding:16px 8px; }
+    .brand-text, .nav-item span, .sync-status span{ display:none; }
+    .nav-item{ justify-content:center; }
+    .main{ padding:18px; }
+    .stat-row{ grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PIN GATE ============ -->
+<div id="pinGate" class="pin-gate">
+  <div class="pin-card">
+    <div class="pin-mark">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 10h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="#fff" stroke-width="2"/></svg>
+    </div>
+    <h1>Magazzino</h1>
+    <p>Inserisci il PIN per accedere</p>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+    <div class="pin-keypad" id="pinKeypad">
+      <button class="pin-key" data-k="1">1</button>
+      <button class="pin-key" data-k="2">2</button>
+      <button class="pin-key" data-k="3">3</button>
+      <button class="pin-key" data-k="4">4</button>
+      <button class="pin-key" data-k="5">5</button>
+      <button class="pin-key" data-k="6">6</button>
+      <button class="pin-key" data-k="7">7</button>
+      <button class="pin-key" data-k="8">8</button>
+      <button class="pin-key" data-k="9">9</button>
+      <button class="pin-key wide" data-k="clear">Cancella</button>
+      <button class="pin-key" data-k="0">0</button>
+      <button class="pin-key wide" data-k="back">&larr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div class="app" id="app" hidden>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4-9 4-9-4Z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M3 7v10l9 4 9-4V7" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M12 11v10" stroke="#fff" stroke-width="2"/></svg>
+      </div>
+      <div class="brand-text"><b>Magazzino</b><span>Gestione scorte</span></div>
+    </div>
+    <nav>
+      <button class="nav-item active" data-screen="preleva">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M6 6h15l-1.5 9h-12L6 6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6 6L5 3H2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9.5" cy="20" r="1.4" fill="currentColor"/><circle cx="17.5" cy="20" r="1.4" fill="currentColor"/></svg>
+        <span>Preleva</span>
+        <span class="nav-badge" id="cartBadge" hidden>0</span>
+      </button>
+      <button class="nav-item" data-screen="storico">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 15a8 8 0 1 0 1.5-8.5L4 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Storico prelievi</span>
+      </button>
+      <button class="nav-item" data-screen="inventario">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M9 9v11" stroke="currentColor" stroke-width="2"/></svg>
+        <span>Inventario</span>
+      </button>
+      <button class="nav-item" data-screen="importa">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 19h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Importa dati</span>
+      </button>
+    </nav>
+    <div class="sync-status">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncLabel">Connessione…</span>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ===== PRELEVA ===== -->
+    <section class="screen active" id="screen-preleva">
+      <div class="page-head">
+        <div>
+          <h2>Preleva materiale</h2>
+          <p>Cerca per materiale o descrizione, aggiungi al prelievo e conferma.</p>
+        </div>
+      </div>
+
+      <div class="preleva-grid">
+        <div>
+          <div class="search-row">
+            <input class="input" id="searchInput" type="text" placeholder="Cerca per materiale o descrizione…">
+            <select class="input" id="filterDivisione"><option value="">Tutte le divisioni</option></select>
+            <select class="input" id="filterMagazzino"><option value="">Tutti i magazzini</option></select>
+          </div>
+          <div class="table-wrap">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Materiale</th><th>Descrizione</th><th>Divisione</th><th>Magazzino</th>
+                  <th>Ubicazione</th><th>Quantità</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="prelevaTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="cart-panel">
+          <h3>Carrello prelievo <span class="cart-count" id="cartCountLabel">0</span></h3>
+          <div id="cartLines"></div>
+          <div class="cart-fields">
+            <div class="field"><label>Operatore *</label><input class="input" id="fldOperatore" type="text" placeholder="Nome operatore"></div>
+            <div class="field"><label>ODL *</label><input class="input" id="fldOdl" type="text" placeholder="Numero ordine di lavoro"></div>
+            <div class="field"><label>Macchina *</label><input class="input" id="fldMacchina" type="text" placeholder="Macchina di destinazione"></div>
+          </div>
+          <button class="btn btn-primary" id="btnConfermaPrelievo" style="width:100%; justify-content:center;">Conferma prelievo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== STORICO ===== -->
+    <section class="screen" id="screen-storico">
+      <div class="page-head">
+        <div>
+          <h2>Storico prelievi</h2>
+          <p>Consulta i prelievi registrati ed esporta i dati per lo scarico su SAP.</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="btnExportStorico">Esporta storico completo</button>
+          <button class="btn btn-primary" id="btnExportDaScaricare">Esporta da scaricare su SAP</button>
+        </div>
+      </div>
+
+      <div class="stat-row" id="storicoStats"></div>
+
+      <div class="filters-bar">
+        <div class="field"><label>Da</label><input class="input" id="filtStoricoDa" type="date"></div>
+        <div class="field"><label>A</label><input class="input" id="filtStoricoA" type="date"></div>
+        <div class="field"><label>Operatore</label><input class="input" id="filtStoricoOperatore" type="text" placeholder="Nome"></div>
+        <div class="field"><label>ODL</label><input class="input" id="filtStoricoOdl" type="text" placeholder="ODL"></div>
+        <div class="field">
+          <label>Stato</label>
+          <select class="input" id="filtStoricoStato">
+            <option value="">Tutti</option>
+            <option value="no">Da esportare</option>
+            <option value="si">Esportati</option>
+          </select>
+        </div>
+        <button class="btn btn-sm" id="btnResetFiltriStorico">Azzera filtri</button>
+      </div>
+      <p class="list-note" id="storicoListNote"></p>
+
+      <div class="table-wrap">
+        <table class="dt">
+          <thead>
+            <tr><th>Data/Ora</th><th>Operatore</th><th>ODL</th><th>Macchina</th><th>Articoli</th><th>Stato</th><th></th></tr>
+          </thead>
+          <tbody id="storicoTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="page-head" style="margin-top:34px;">
+        <div>
+          <h2 style="font-size:1.05rem;">Pulizia storico</h2>
+          <p>Elimina dal database i prelievi già esportati prima di una certa data (restano comunque nei file già scaricati). Utile per mantenere l'app veloce nel lungo periodo.</p>
+        </div>
+      </div>
+      <div class="filters-bar">
+        <div class="field"><label>Elimina esportati prima del</label><input class="input" id="pulisciData" type="date"></div>
+        <button class="btn btn-danger" id="btnPulisciStorico">Elimina prelievi esportati precedenti</button>
+      </div>
+    </section>
+
+    <!-- ===== INVENTARIO ===== -->
+    <section class="screen" id="screen-inventario">
+      <div class="page-head">
+        <div>
+          <h2>Inventario</h2>
+          <p>Consulta e correggi quantità, ubicazione e note. Con "Esporta inventario" scarichi il file con le stesse colonne del tuo Excel.</p>
+        </div>
+        <div class="head-actions">
+          <div class="field" style="min-width:150px;"><label>Soglia scorta bassa</label><input class="input" id="fldSoglia" type="number" min="0" style="width:110px;"></div>
+          <button class="btn btn-primary" id="btnExportInventario">Esporta inventario</button>
+          <button class="btn" id="btnLockInventario" title="Richiede di nuovo il codice per entrare nell'Inventario">Blocca</button>
+        </div>
+      </div>
+
+      <div class="stat-row" id="inventarioStats"></div>
+
+      <div class="search-row">
+        <input class="input" id="invSearchInput" type="text" placeholder="Cerca per materiale, descrizione, ubicazione o note…">
+        <select class="input" id="invFilterStato">
+          <option value="">Tutti gli stati</option>
+          <option value="ok">Scorta regolare</option>
+          <option value="bassa">Scorta bassa</option>
+          <option value="esaurito">Esaurito</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table class="dt">
+          <thead>
+            <tr>
+              <th>Materiale</th><th>Descrizione</th><th>Divisione</th><th>Magazzino</th><th>U.M.</th>
+              <th>Quantità</th><th>Ubicazione</th><th>Note</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="inventarioTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== IMPORTA ===== -->
+    <section class="screen" id="screen-importa">
+      <div class="page-head">
+        <div>
+          <h2>Importa dati</h2>
+          <p>Carica il file Excel per aggiornare l'inventario: l'export SAP oppure il file di lavoro con ubicazioni e note.</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="btnLockImporta" title="Richiede di nuovo il codice per entrare in Inventario e Importa dati">Blocca</button>
+        </div>
+      </div>
+
+      <div id="ultimoImportInfo" class="import-preview-note" style="margin-bottom:16px;"></div>
+
+      <div class="flow-note">
+        <b>Come funziona lo scambio con il tuo Excel.</b>
+        Le quantità (colonna <i>Utilizz. liber.</i>) vengono sempre prese dal file. Ubicazione e note vengono lette dal file solo se la cella è compilata: una cella vuota non cancella quello che hai scritto nell'app.
+        Per portare sul PC le note scritte nell'app usa <b>Inventario → Esporta inventario</b>.
+      </div>
+
+      <div class="import-drop">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M12 3v12" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 19h16" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"/></svg>
+        <div><b>Trascina qui il file Excel</b> oppure</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" style="margin-top:14px;">
+        <div class="import-preview-note">Colonne riconosciute: Divisione, Materiale, Descrizione materiale, Magazzino, Unità misura di base, Utilizz. liber., Ubicazione, Note<br>(obbligatorie solo Materiale e Utilizz. liber.)</div>
+      </div>
+
+      <div id="importPreviewArea"></div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<div id="modalRoot"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ UTIL ============ */
+  function esc(s){
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function fmtNum(n){
+    n = Number(n) || 0;
+    return n.toLocaleString('it-IT');
+  }
+  function round3(n){ return Math.round(n * 1000) / 1000; }
+  function fmtDateTime(iso){
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+  }
+  function fmtDate(iso){
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('it-IT');
+  }
+  function todayISO(){ return new Date().toISOString(); }
+  function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+  function sanitizeIdSegment(s){
+    s = String(s == null ? '' : s).trim();
+    s = s.replace(/[^a-zA-Z0-9_\-~:@+]/g, '_');
+    s = s.slice(0, 90);
+    return s || '_';
+  }
+  // Identità di una riga di inventario = Divisione + Materiale + Magazzino.
+  // Ubicazione e note sono attributi modificabili, NON fanno parte dell'identità
+  // (così cambiarle sul PC e reimportare aggiorna la riga invece di crearne una nuova).
+  function makeItemId(div, mat, mag){
+    return ('m_' + [div, mat, mag].map(sanitizeIdSegment).join('__')).slice(0, 190);
+  }
+  function normKey(s){ return String(s == null ? '' : s).trim().toUpperCase(); }
+  function keyOf(div, mat, mag){ return [div, mat, mag].map(normKey).join('|'); }
+  function normHeader(h){
+    return String(h == null ? '' : h).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[._\-\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function debounce(fn, ms){
+    var t; return function(){ var args = arguments, ctx = this; clearTimeout(t); t = setTimeout(function(){ fn.apply(ctx, args); }, ms); };
+  }
+  function uniqSorted(arr){
+    return Array.from(new Set(arr.filter(function(v){ return v !== '' && v != null; }))).sort(function(a,b){ return String(a).localeCompare(String(b), 'it', {numeric:true}); });
+  }
+  function cmpMateriale(a, b){
+    var keys = ['materiale', 'divisione', 'magazzino', 'ubicazione'];
+    for (var i = 0; i < keys.length; i++){
+      var c = String(a[keys[i]] || '').localeCompare(String(b[keys[i]] || ''), 'it', {numeric:true});
+      if (c) return c;
+    }
+    return 0;
+  }
+  // tutte le parole cercate devono comparire nel testo
+  function matchTokens(hay, q){
+    var tokens = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    hay = String(hay || '').toLowerCase();
+    return tokens.every(function(t){ return hay.indexOf(t) !== -1; });
+  }
+  // Numeri da Excel/SAP: accetta 1234,5 - 1.234,5 - 1.234 - 12- (segno finale) - numeri veri
+  function parseQty(v){
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    var s = String(v == null ? '' : v).trim().replace(/\s/g, '');
+    if (s === '') return null;
+    var neg = false;
+    if (/-$/.test(s)){ neg = true; s = s.slice(0, -1); }
+    else if (/^-/.test(s)){ neg = true; s = s.slice(1); }
+    if (s.indexOf(',') !== -1 && s.indexOf('.') !== -1){ s = s.replace(/\./g, '').replace(',', '.'); }
+    else if (s.indexOf(',') !== -1){ s = s.replace(',', '.'); }
+    else if (/^\d{1,3}(\.\d{3})+$/.test(s)){ s = s.replace(/\./g, ''); }
+    if (!/^\d+(\.\d+)?$/.test(s)) return null;
+    var n = parseFloat(s);
+    return neg ? -n : n;
+  }
+  function snapExists(s){ return typeof s.exists === 'function' ? s.exists() : !!s.exists; }
+
+  function toast(msg, kind){
+    var wrap = document.getElementById('toastWrap');
+    var el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(function(){ el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(function(){ el.remove(); }, 300); }, 4200);
+  }
+
+  function openModal(html, opts){
+    opts = opts || {};
+    var root = document.getElementById('modalRoot');
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = '<div class="modal">' + html + '</div>';
+    root.appendChild(overlay);
+    if (!opts.persistent){
+      overlay.addEventListener('click', function(e){ if (e.target === overlay) closeModal(); });
+    }
+    return overlay;
+  }
+  function closeModal(){
+    var root = document.getElementById('modalRoot');
+    root.innerHTML = '';
+  }
+  function askConfirm(title, text, okLabel, cancelLabel, onOk){
+    var html = '<h3>' + esc(title) + '</h3><p class="sub">' + esc(text) + '</p>' +
+      '<div class="modal-actions"><button class="btn" id="cfNo">' + esc(cancelLabel) + '</button><button class="btn btn-primary" id="cfYes">' + esc(okLabel) + '</button></div>';
+    var overlay = openModal(html, { persistent: true });
+    overlay.querySelector('#cfNo').addEventListener('click', closeModal);
+    overlay.querySelector('#cfYes').addEventListener('click', function(){ closeModal(); onOk(); });
+  }
+
+  /* ============ CODICI DI ACCESSO ============
+     Attenzione: sono blocchi lato pagina contro l'uso accidentale, non una vera protezione dei dati.
+     Nel codice ci sono solo le impronte (SHA-256), non i codici in chiaro. */
+  var SALT = 'magazzino-pin:';
+  var HASH_PIN = '7abe48a9ada0095f6d3f4bb8e58d7e9f92d382177e0039a5d7dd63a7d5e2e0fd';   // accesso all'app
+  var HASH_INV = 'e9345af106041b76b045d2f58dc577f37e274dc2050b88f05c53d0698d51c6d0';   // area Inventario
+  var PROTECTED_SCREENS = ['inventario', 'importa'];   // stesso codice, si sblocca una volta per entrambe
+  var PIN_KEY = 'magazzino_unlocked_v1', INV_KEY = 'magazzino_inv_unlocked_v1';
+  var invUnlockedMem = false;
+
+  function sha256Hex(text){
+    if (!(window.crypto && window.crypto.subtle)) return Promise.reject(new Error('crypto'));
+    var data = new TextEncoder().encode(text);
+    return window.crypto.subtle.digest('SHA-256', data).then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){ return ('0' + b.toString(16)).slice(-2); }).join('');
+    });
+  }
+  function checkSecret(value, expectedHash){
+    return sha256Hex(SALT + value).then(function(h){ return h === expectedHash; });
+  }
+  function getInvUnlocked(){
+    try { return sessionStorage.getItem(INV_KEY) === '1'; } catch(e){ return invUnlockedMem; }
+  }
+  function setInvUnlocked(v){
+    invUnlockedMem = v;
+    try { if (v) sessionStorage.setItem(INV_KEY, '1'); else sessionStorage.removeItem(INV_KEY); } catch(e){}
+  }
+
+  /* ============ STATE ============ */
+  var dbNS = null;
+  var N_BUCKETS = 32;               // l'inventario è salvato in 32 documenti ("blocchi"): pochissime letture per ogni apertura
+  var chunks = {};                  // docId blocco -> { itemId: item }
+  var inventario = new Map();       // itemId -> item
+  var prelievi = new Map();         // prelievi caricati (recenti + da esportare)
+  var prelieviRecent = new Map(), prelieviPending = new Map();
+  var pendingLoaded = false, storicoSubscribed = false;
+  var PRELIEVI_LIMIT = 300;
+  var settings = { sogliaScortaBassa: 5, ultimoImport: null, righeImportate: 0 };
+  var cart = [];                    // {itemId, materiale, descrizione, divisione, magazzino, um, ubicazione, quantita, note}
+  var currentScreen = 'preleva';
+  var dbAvailable = false;
+
+  function bucketOf(id){
+    var h = 5381;
+    for (var i = 0; i < id.length; i++){ h = ((h << 5) + h + id.charCodeAt(i)) | 0; }
+    return (h >>> 0) % N_BUCKETS;
+  }
+  function bucketDocId(b){ return 'b' + (b < 10 ? '0' + b : '' + b); }
+
+  /* ============ PIN GATE ============ */
+  function initPin(){
+    var pin = '';
+    var dots = document.querySelectorAll('#pinDots .pin-dot');
+    var errorEl = document.getElementById('pinError');
+    var gate = document.getElementById('pinGate');
+    var app = document.getElementById('app');
+    var checking = false;
+
+    function render(){
+      dots.forEach(function(d, i){ d.classList.toggle('filled', i < pin.length); });
+    }
+    function unlock(){
+      try { sessionStorage.setItem(PIN_KEY, '1'); } catch(e){}
+      gate.style.display = 'none';
+      app.hidden = false;
+      startApp();
+    }
+    function tryPin(){
+      if (pin.length !== 4 || checking) return;
+      var entered = pin;
+      checking = true;
+      checkSecret(entered, HASH_PIN).then(function(ok){
+        checking = false;
+        if (ok){ unlock(); return; }
+        errorEl.textContent = 'PIN errato, riprova';
+        pin = ''; render();
+        setTimeout(function(){ errorEl.textContent = ''; }, 1800);
+      }).catch(function(){
+        checking = false;
+        errorEl.textContent = 'Apri l\'app da un indirizzo https';
+        pin = ''; render();
+      });
+    }
+    document.getElementById('pinKeypad').addEventListener('click', function(e){
+      var btn = e.target.closest('.pin-key');
+      if (!btn) return;
+      var k = btn.getAttribute('data-k');
+      if (k === 'clear'){ pin = ''; }
+      else if (k === 'back'){ pin = pin.slice(0, -1); }
+      else if (pin.length < 4){ pin += k; }
+      render();
+      if (pin.length === 4) setTimeout(tryPin, 120);
+    });
+    document.addEventListener('keydown', function(e){
+      if (gate.style.display === 'none') return;
+      if (/^[0-9]$/.test(e.key) && pin.length < 4){ pin += e.key; render(); if (pin.length === 4) setTimeout(tryPin, 120); }
+      else if (e.key === 'Backspace'){ pin = pin.slice(0, -1); render(); }
+    });
+
+    var already = false;
+    try { already = sessionStorage.getItem(PIN_KEY) === '1'; } catch(e){}
+    if (already){ unlock(); }
+  }
+
+  /* ============ APP BOOTSTRAP ============ */
+  function startApp(){
+    initNav();
+    setSyncStatus('connecting');
+    initPreleva();
+    initStorico();
+    initInventario();
+    initImporta();
+    connectDb();
+  }
+
+  function showScreen(scr){
+    currentScreen = scr;
+    document.querySelectorAll('.nav-item').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-screen') === scr); });
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('active', s.id === 'screen-' + scr); });
+    if (scr === 'storico'){ subscribePrelievi(); renderStorico(); }
+    if (scr === 'inventario') renderInventario();
+    if (scr === 'preleva') renderPreleva();
+  }
+
+  function initNav(){
+    document.querySelectorAll('.nav-item').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var scr = btn.getAttribute('data-screen');
+        if (PROTECTED_SCREENS.indexOf(scr) !== -1 && !getInvUnlocked()){
+          askInventarioPin(function(){ showScreen(scr); });
+          return;
+        }
+        showScreen(scr);
+      });
+    });
+  }
+
+  function askInventarioPin(onOk){
+    var html = '<h3>Area protetta</h3><p class="sub">Inserisci il codice per accedere a Inventario e Importa dati.</p>' +
+      '<div class="modal-fields"><div class="field"><label>Codice</label><input class="input" id="invPinInput" type="password" autocomplete="off" placeholder="Codice Inventario"></div>' +
+      '<div class="pin-error" id="invPinError"></div></div>' +
+      '<div class="modal-actions"><button class="btn" id="invPinCancel">Annulla</button><button class="btn btn-primary" id="invPinOk">Sblocca</button></div>';
+    var overlay = openModal(html);
+    var input = overlay.querySelector('#invPinInput'), err = overlay.querySelector('#invPinError');
+    function submit(){
+      var v = input.value;
+      if (!v) return;
+      checkSecret(v, HASH_INV).then(function(ok){
+        if (ok){ setInvUnlocked(true); closeModal(); onOk(); }
+        else { err.textContent = 'Codice errato'; input.value = ''; input.focus(); }
+      }).catch(function(){ err.textContent = 'Apri l\'app da un indirizzo https'; });
+    }
+    overlay.querySelector('#invPinOk').addEventListener('click', submit);
+    overlay.querySelector('#invPinCancel').addEventListener('click', closeModal);
+    input.addEventListener('keydown', function(e){ if (e.key === 'Enter') submit(); });
+    input.focus();
+  }
+
+  function setSyncStatus(state){
+    var dot = document.getElementById('syncDot');
+    var label = document.getElementById('syncLabel');
+    dot.className = 'sync-dot';
+    if (state === 'ok'){ dot.classList.add('ok'); label.textContent = 'Sincronizzato'; }
+    else if (state === 'bad'){ dot.classList.add('bad'); label.textContent = 'Database non disponibile'; }
+    else if (state === 'offline'){ dot.classList.add('bad'); label.textContent = 'Offline — riconnessione…'; }
+    else { label.textContent = 'Connessione…'; }
+  }
+
+  /* ============ DB CONNECT (Firebase / Firestore) ============ */
+  function dbFail(msg){
+    setSyncStatus('bad');
+    toast(msg, 'err');
+    renderPreleva();
+  }
+  function connectDb(){
+    var cfg = window.FIREBASE_CONFIG;
+    if (!window.firebase || !window.firebase.firestore){
+      dbFail('Impossibile caricare Firebase: controlla la connessione internet.');
+      return;
+    }
+    if (!cfg || !cfg.apiKey || /INCOLLA/i.test(String(cfg.apiKey)) || !cfg.projectId){
+      dbFail('Configurazione Firebase mancante: apri il file firebase-config.js e incolla i valori del tuo progetto.');
+      return;
+    }
+    try {
+      window.firebase.initializeApp(cfg);
+      dbNS = window.firebase.firestore();
+      dbNS.settings({ ignoreUndefinedProperties: true, experimentalAutoDetectLongPolling: true, merge: true });
+    } catch(e){
+      console.error(e);
+      dbFail('Errore di inizializzazione del database.');
+      return;
+    }
+    dbAvailable = true;
+    subscribeSettings();
+    subscribeInventario();
+    renderPreleva();
+  }
+
+  function dbError(err){
+    console.error('firestore error', err);
+    if (err && err.code === 'permission-denied'){
+      setSyncStatus('bad');
+      toast('Accesso al database negato: controlla le regole di Firestore (vedi LEGGIMI).', 'err');
+    } else {
+      setSyncStatus('offline');
+    }
+  }
+
+  function subscribeSettings(){
+    dbNS.doc('settings/app').onSnapshot(function(snap){
+      if (snapExists(snap)){
+        var d = snap.data();
+        settings.sogliaScortaBassa = (typeof d.sogliaScortaBassa === 'number') ? d.sogliaScortaBassa : 5;
+        settings.ultimoImport = d.ultimoImport || null;
+        settings.righeImportate = d.righeImportate || 0;
+      }
+      var f = document.getElementById('fldSoglia');
+      if (f && document.activeElement !== f) f.value = settings.sogliaScortaBassa;
+      renderUltimoImportInfo();
+      if (currentScreen === 'inventario') renderInventario();
+      if (currentScreen === 'preleva') renderPreleva();
+    }, dbError);
+  }
+
+  var scheduleRender = debounce(function(){
+    populateFilters();
+    if (currentScreen === 'preleva') renderPreleva();
+    if (currentScreen === 'inventario') renderInventario();
+  }, 80);
+
+  function rebuildInventario(){
+    inventario.clear();
+    Object.keys(chunks).forEach(function(b){
+      var items = chunks[b];
+      Object.keys(items).forEach(function(id){
+        inventario.set(id, Object.assign({ id: id }, items[id]));
+      });
+    });
+    scheduleRender();
+  }
+
+  function subscribeInventario(){
+    dbNS.collection('inv').onSnapshot(function(snap){
+      chunks = {};
+      snap.docs.forEach(function(d){
+        var data = d.data();
+        chunks[d.id] = (data && data.items) || {};
+      });
+      rebuildInventario();
+      if (snap.metadata && snap.metadata.fromCache) setSyncStatus('offline'); else setSyncStatus('ok');
+    }, dbError);
+  }
+
+  function subscribePrelievi(){
+    if (!dbAvailable || storicoSubscribed) return;
+    storicoSubscribed = true;
+    dbNS.collection('prelievi').orderBy('dataOra', 'desc').limit(PRELIEVI_LIMIT).onSnapshot(function(snap){
+      prelieviRecent.clear();
+      snap.docs.forEach(function(d){ prelieviRecent.set(d.id, Object.assign({ id: d.id }, d.data())); });
+      mergePrelievi();
+    }, dbError);
+    dbNS.collection('prelievi').where('esportato', '==', false).limit(2000).onSnapshot(function(snap){
+      prelieviPending.clear();
+      snap.docs.forEach(function(d){ prelieviPending.set(d.id, Object.assign({ id: d.id }, d.data())); });
+      pendingLoaded = true;
+      mergePrelievi();
+    }, dbError);
+  }
+  function mergePrelievi(){
+    prelievi.clear();
+    prelieviRecent.forEach(function(v, k){ prelievi.set(k, v); });
+    prelieviPending.forEach(function(v, k){ prelievi.set(k, v); });
+    if (currentScreen === 'storico') renderStorico();
+  }
+
+  /* Scrittura sull'inventario: ogni modifica è una transazione sui blocchi interessati,
+     quindi due postazioni che scrivono insieme non si sovrascrivono a vicenda. */
+  function inventoryTransaction(bucketList, work){
+    var uniq = Array.from(new Set(bucketList));
+    return dbNS.runTransaction(function(tx){
+      var refs = uniq.map(function(b){ return dbNS.collection('inv').doc(bucketDocId(b)); });
+      return Promise.all(refs.map(function(r){ return tx.get(r); })).then(function(snaps){
+        var items = {};
+        snaps.forEach(function(s, i){
+          var d = snapExists(s) ? s.data() : null;
+          items[uniq[i]] = (d && d.items) ? deepClone(d.items) : {};
+        });
+        work(items, tx);
+        uniq.forEach(function(b, i){
+          if (JSON.stringify(items[b]).length > 900000){
+            var e = new Error('blocco pieno'); e.code = 'bucket-full'; throw e;
+          }
+          tx.set(refs[i], { items: items[b] });
+        });
+      });
+    });
+  }
+
+  /* ============ STOCK STATUS ============ */
+  function stockStatus(qty){
+    qty = Number(qty) || 0;
+    if (qty <= 0) return 'esaurito';
+    if (qty <= (settings.sogliaScortaBassa || 0)) return 'bassa';
+    return 'ok';
+  }
+  function stockBadge(qty){
+    var st = stockStatus(qty);
+    if (st === 'esaurito') return '<span class="badge critical">Esaurito</span>';
+    if (st === 'bassa') return '<span class="badge warn">Scorta bassa</span>';
+    return '<span class="badge good">Regolare</span>';
+  }
+  function matOf(x){ return (x && (x.materiale || x.catFS)) || ''; }
+
+  /* ============ PRELEVA SCREEN ============ */
+  function initPreleva(){
+    document.getElementById('searchInput').addEventListener('input', debounce(renderPreleva, 80));
+    document.getElementById('filterDivisione').addEventListener('change', renderPreleva);
+    document.getElementById('filterMagazzino').addEventListener('change', renderPreleva);
+    document.getElementById('btnConfermaPrelievo').addEventListener('click', confermaPrelievo);
+    renderCart();
+  }
+
+  function populateFilters(){
+    var all = Array.from(inventario.values());
+    fillSelect('filterDivisione', uniqSorted(all.map(function(i){ return i.divisione; })), 'Tutte le divisioni');
+    fillSelect('filterMagazzino', uniqSorted(all.map(function(i){ return i.magazzino; })), 'Tutti i magazzini');
+  }
+  function fillSelect(id, values, placeholder){
+    var sel = document.getElementById(id);
+    var current = sel.value;
+    sel.innerHTML = '<option value="">' + esc(placeholder) + '</option>' +
+      values.map(function(v){ return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+    if (values.indexOf(current) !== -1) sel.value = current;
+  }
+
+  function filteredInventario(searchVal, divVal, magVal){
+    return Array.from(inventario.values()).filter(function(item){
+      if (divVal && item.divisione !== divVal) return false;
+      if (magVal && item.magazzino !== magVal) return false;
+      if (!searchVal || !String(searchVal).trim()) return true;
+      return matchTokens(matOf(item) + ' ' + (item.descrizione || ''), searchVal);
+    }).sort(cmpMateriale);
+  }
+
+  var PRELEVA_LIMIT = 200, INV_LIMIT = 300;
+
+  function renderPreleva(){
+    var tbody = document.getElementById('prelevaTbody');
+    if (!dbAvailable){
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><b>Database non connesso</b>Controlla la configurazione (file firebase-config.js) e la connessione internet.</div></td></tr>';
+      return;
+    }
+    var q = document.getElementById('searchInput').value;
+    var div = document.getElementById('filterDivisione').value;
+    var mag = document.getElementById('filterMagazzino').value;
+    var rows = filteredInventario(q, div, mag);
+
+    if (!q.trim() && !div && !mag){
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">' +
+        '<b>Inizia digitando un materiale o una descrizione</b>Oppure usa i filtri per divisione/magazzino.</div></td></tr>';
+      return;
+    }
+    if (rows.length === 0){
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><b>Nessun risultato</b>Prova un altro termine di ricerca.</div></td></tr>';
+      return;
+    }
+    var total = rows.length;
+    rows = rows.slice(0, PRELEVA_LIMIT);
+    tbody.innerHTML = rows.map(function(item){
+      return '<tr>' +
+        '<td class="mono">' + esc(matOf(item)) + '</td>' +
+        '<td class="cell-desc">' + esc(item.descrizione) + (item.note ? ' <span class="note-icon" title="' + esc(item.note) + '">&#128221;</span>' : '') + '</td>' +
+        '<td class="cell-muted">' + esc(item.divisione) + '</td>' +
+        '<td class="cell-muted">' + esc(item.magazzino) + '</td>' +
+        '<td class="cell-muted">' + esc(item.ubicazione) + '</td>' +
+        '<td class="mono">' + fmtNum(item.quantita) + ' <span class="cell-muted">' + esc(item.um) + '</span> ' + stockBadge(item.quantita) + '</td>' +
+        '<td><button class="btn btn-sm btn-primary" data-add="' + esc(item.id) + '">+ Aggiungi</button></td>' +
+      '</tr>';
+    }).join('') + (total > PRELEVA_LIMIT ? '<tr><td colspan="7" class="cell-muted">Mostrati i primi ' + PRELEVA_LIMIT + ' di ' + total + ' risultati: restringi la ricerca.</td></tr>' : '');
+    tbody.querySelectorAll('[data-add]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openAddToCartModal(btn.getAttribute('data-add')); });
+    });
+  }
+
+  function cartQtyFor(itemId){
+    return cart.filter(function(l){ return l.itemId === itemId; }).reduce(function(s, l){ return s + l.quantita; }, 0);
+  }
+
+  function openAddToCartModal(itemId){
+    var item = inventario.get(itemId);
+    if (!item) return;
+    var already = cartQtyFor(itemId);
+    var avail = round3(Number(item.quantita) - already);
+    var html =
+      '<h3>Aggiungi al prelievo</h3>' +
+      '<p class="sub mono">' + esc(matOf(item)) + ' &middot; ' + esc(item.descrizione) + '</p>' +
+      '<p class="sub">Div. ' + esc(item.divisione) + ' &middot; Mag. ' + esc(item.magazzino) + ' &middot; Ubicazione: ' + esc(item.ubicazione || '—') +
+        ' &middot; Disponibili: <b>' + fmtNum(avail) + ' ' + esc(item.um) + '</b>' + (already ? ' (già ' + fmtNum(already) + ' nel carrello)' : '') + '</p>' +
+      (item.note ? '<p class="sub">Nota: ' + esc(item.note) + '</p>' : '') +
+      '<div class="modal-fields">' +
+        '<div class="field"><label>Quantità da prelevare' + (item.um ? ' (' + esc(item.um) + ')' : '') + ' *</label><input class="input" id="modalQty" type="number" min="0" step="any" value="1"></div>' +
+        '<div class="field"><label>Nota (opzionale)</label><textarea class="input" id="modalNote" placeholder="Annotazione per questa riga"></textarea></div>' +
+      '</div>' +
+      '<div class="modal-actions">' +
+        '<button class="btn" id="modalCancel">Annulla</button>' +
+        '<button class="btn btn-primary" id="modalConfirm">Aggiungi al carrello</button>' +
+      '</div>';
+    var overlay = openModal(html);
+    overlay.querySelector('#modalCancel').addEventListener('click', closeModal);
+    overlay.querySelector('#modalConfirm').addEventListener('click', function(){
+      var qty = parseQty(overlay.querySelector('#modalQty').value);
+      var note = overlay.querySelector('#modalNote').value.trim();
+      if (qty === null || qty <= 0){ toast('Inserisci una quantità valida', 'err'); return; }
+      if (qty > avail){ toast('Quantità superiore alla disponibilità (' + fmtNum(avail) + ')', 'err'); return; }
+      cart.push({
+        itemId: item.id, materiale: matOf(item), descrizione: item.descrizione || '',
+        divisione: item.divisione || '', magazzino: item.magazzino || '', um: item.um || '',
+        ubicazione: item.ubicazione || '', quantita: qty, note: note
+      });
+      renderCart();
+      closeModal();
+      toast('Aggiunto al carrello', 'ok');
+    });
+    overlay.querySelector('#modalQty').focus();
+  }
+
+  function renderCart(){
+    var wrap = document.getElementById('cartLines');
+    var countLabel = document.getElementById('cartCountLabel');
+    var badge = document.getElementById('cartBadge');
+    countLabel.textContent = cart.length;
+    if (cart.length > 0){ badge.hidden = false; badge.textContent = cart.length; } else { badge.hidden = true; }
+
+    if (cart.length === 0){
+      wrap.innerHTML = '<div class="cart-empty">Nessun articolo nel carrello.<br>Cerca un materiale e aggiungilo.</div>';
+      return;
+    }
+    wrap.innerHTML = cart.map(function(line, idx){
+      return '<div class="cart-line">' +
+        '<div class="cart-line-top">' +
+          '<div><div class="cart-line-cat">' + esc(line.materiale) + '</div><div class="cart-line-desc">' + esc(line.descrizione) + '</div></div>' +
+          '<button class="cart-remove" data-remove="' + idx + '" title="Rimuovi">&times;</button>' +
+        '</div>' +
+        '<div class="cart-line-meta">Qtà: <b class="mono">' + fmtNum(line.quantita) + '</b> ' + esc(line.um) + ' &middot; Mag. ' + esc(line.magazzino) + ' &middot; ' + esc(line.ubicazione || '—') + (line.note ? ' &middot; Nota: ' + esc(line.note) : '') + '</div>' +
+      '</div>';
+    }).join('');
+    wrap.querySelectorAll('[data-remove]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        cart.splice(parseInt(btn.getAttribute('data-remove'), 10), 1);
+        renderCart();
+      });
+    });
+  }
+
+  function confermaPrelievo(){
+    if (!dbAvailable){ toast('Database non disponibile', 'err'); return; }
+    if (cart.length === 0){ toast('Il carrello è vuoto', 'err'); return; }
+    var operatore = document.getElementById('fldOperatore').value.trim();
+    var odl = document.getElementById('fldOdl').value.trim();
+    var macchina = document.getElementById('fldMacchina').value.trim();
+    if (!operatore || !odl || !macchina){
+      toast('Compila Operatore, ODL e Macchina', 'err');
+      return;
+    }
+    // totale per articolo (lo stesso articolo può comparire in più righe del carrello)
+    var totals = {};
+    cart.forEach(function(l){ totals[l.itemId] = round3((totals[l.itemId] || 0) + l.quantita); });
+    var ids = Object.keys(totals);
+    var btn = document.getElementById('btnConfermaPrelievo');
+    btn.disabled = true;
+
+    var righe = cart.map(function(l){
+      return { materiale: l.materiale, descrizione: l.descrizione, divisione: l.divisione, magazzino: l.magazzino,
+               um: l.um, ubicazione: l.ubicazione, quantita: l.quantita, note: l.note || '', itemId: l.itemId };
+    });
+    var now = todayISO();
+    var prelRef = dbNS.collection('prelievi').doc();
+
+    // Transazione: legge le quantità aggiornate, controlla la disponibilità, scala e registra il prelievo tutto insieme.
+    inventoryTransaction(ids.map(bucketOf), function(items, tx){
+      ids.forEach(function(id){
+        var it = items[bucketOf(id)][id];
+        var avail = it ? (Number(it.quantita) || 0) : 0;
+        if (!it || totals[id] > avail + 1e-9){
+          var e = new Error('stock'); e.code = 'stock'; e.itemId = id; e.avail = avail; throw e;
+        }
+        it.quantita = round3(avail - totals[id]);
+        it.aggiornatoIl = now;
+      });
+      tx.set(prelRef, { operatore: operatore, odl: odl, macchina: macchina, dataOra: now,
+                        righe: righe, esportato: false, dataEsportazione: null });
+    }).then(function(){
+      cart = [];
+      renderCart();
+      document.getElementById('fldOperatore').value = '';
+      document.getElementById('fldOdl').value = '';
+      document.getElementById('fldMacchina').value = '';
+      toast('Prelievo registrato correttamente', 'ok');
+    }).catch(function(err){
+      if (err && err.code === 'stock'){
+        var it = inventario.get(err.itemId);
+        toast('Disponibilità cambiata per ' + (it ? matOf(it) : 'un articolo') + ' (ora ' + fmtNum(err.avail) + '). Correggi la quantità e riprova.', 'err');
+      } else {
+        console.error(err);
+        toast('Errore durante la registrazione del prelievo: riprova.', 'err');
+      }
+    }).then(function(){
+      btn.disabled = false;
+    });
+  }
+
+  /* ============ STORICO SCREEN ============ */
+  function initStorico(){
+    document.getElementById('filtStoricoDa').addEventListener('change', renderStorico);
+    document.getElementById('filtStoricoA').addEventListener('change', renderStorico);
+    document.getElementById('filtStoricoOperatore').addEventListener('input', debounce(renderStorico, 120));
+    document.getElementById('filtStoricoOdl').addEventListener('input', debounce(renderStorico, 120));
+    document.getElementById('filtStoricoStato').addEventListener('change', renderStorico);
+    document.getElementById('btnResetFiltriStorico').addEventListener('click', function(){
+      document.getElementById('filtStoricoDa').value = '';
+      document.getElementById('filtStoricoA').value = '';
+      document.getElementById('filtStoricoOperatore').value = '';
+      document.getElementById('filtStoricoOdl').value = '';
+      document.getElementById('filtStoricoStato').value = '';
+      renderStorico();
+    });
+    document.getElementById('btnExportDaScaricare').addEventListener('click', exportDaScaricare);
+    document.getElementById('btnExportStorico').addEventListener('click', exportStoricoCompleto);
+    document.getElementById('btnPulisciStorico').addEventListener('click', pulisciStorico);
+  }
+
+  function filteredPrelievi(){
+    var da = document.getElementById('filtStoricoDa').value;
+    var a = document.getElementById('filtStoricoA').value;
+    var op = document.getElementById('filtStoricoOperatore').value.toLowerCase().trim();
+    var odl = document.getElementById('filtStoricoOdl').value.toLowerCase().trim();
+    var stato = document.getElementById('filtStoricoStato').value;
+
+    return Array.from(prelievi.values()).filter(function(p){
+      var d = p.dataOra ? p.dataOra.slice(0,10) : '';
+      if (da && d < da) return false;
+      if (a && d > a) return false;
+      if (op && !(p.operatore || '').toLowerCase().includes(op)) return false;
+      if (odl && !(p.odl || '').toLowerCase().includes(odl)) return false;
+      if (stato === 'si' && !p.esportato) return false;
+      if (stato === 'no' && p.esportato) return false;
+      return true;
+    }).sort(function(a,b){ return (b.dataOra||'').localeCompare(a.dataOra||''); });
+  }
+
+  function renderStorico(){
+    var all = Array.from(prelievi.values());
+    var daEsportare = all.filter(function(p){ return !p.esportato; }).length;
+    var statsEl = document.getElementById('storicoStats');
+    statsEl.innerHTML =
+      '<div class="stat-tile"><div class="n mono">' + all.length + '</div><div class="l">Prelievi caricati</div></div>' +
+      '<div class="stat-tile"><div class="n mono">' + daEsportare + '</div><div class="l">Da esportare su SAP</div></div>' +
+      '<div class="stat-tile"><div class="n mono">' + (all.length - daEsportare) + '</div><div class="l">Già esportati</div></div>' +
+      '<div class="stat-tile"><div class="n mono">' + all.reduce(function(s,p){ return s + (p.righe ? p.righe.length : 0); }, 0) + '</div><div class="l">Righe articolo totali</div></div>';
+    document.getElementById('storicoListNote').textContent = 'Sono caricati gli ultimi ' + PRELIEVI_LIMIT + ' prelievi più tutti quelli ancora da esportare. Per periodi più vecchi usa "Esporta storico completo".';
+
+    var tbody = document.getElementById('storicoTbody');
+    var rows = filteredPrelievi();
+    if (rows.length === 0){
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><b>Nessun prelievo trovato</b>Modifica i filtri o registra un nuovo prelievo.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(p){
+      var nArt = p.righe ? p.righe.length : 0;
+      return '<tr>' +
+        '<td class="mono">' + fmtDateTime(p.dataOra) + '</td>' +
+        '<td>' + esc(p.operatore) + '</td>' +
+        '<td class="mono">' + esc(p.odl) + '</td>' +
+        '<td>' + esc(p.macchina) + '</td>' +
+        '<td class="mono">' + nArt + '</td>' +
+        '<td>' + (p.esportato ? '<span class="badge good">Esportato</span>' : '<span class="badge warn">Da esportare</span>') + '</td>' +
+        '<td><button class="btn btn-sm" data-detail="' + esc(p.id) + '">Dettaglio</button></td>' +
+      '</tr>';
+    }).join('');
+    tbody.querySelectorAll('[data-detail]').forEach(function(btn){
+      btn.addEventListener('click', function(){ showPrelievoDetail(btn.getAttribute('data-detail')); });
+    });
+  }
+
+  function showPrelievoDetail(id){
+    var p = prelievi.get(id);
+    if (!p) return;
+    var righe = p.righe || [];
+    var html = '<h3>Prelievo del ' + fmtDateTime(p.dataOra) + '</h3>' +
+      '<p class="sub">Operatore: <b>' + esc(p.operatore) + '</b> &middot; ODL: <b>' + esc(p.odl) + '</b> &middot; Macchina: <b>' + esc(p.macchina) + '</b></p>' +
+      '<div class="table-wrap" style="margin-bottom:16px;"><table class="dt"><thead><tr><th>Materiale</th><th>Descrizione</th><th>Qtà</th><th>Ubicazione</th><th>Nota</th></tr></thead><tbody>' +
+      righe.map(function(r){
+        return '<tr><td class="mono">' + esc(matOf(r)) + '</td><td>' + esc(r.descrizione) + '</td><td class="mono">' + fmtNum(r.quantita) + ' ' + esc(r.um || '') + '</td><td>' + esc(r.ubicazione) + '</td><td>' + esc(r.note || '') + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="modal-actions"><button class="btn btn-primary" id="modalClose">Chiudi</button></div>';
+    var overlay = openModal(html);
+    overlay.querySelector('.modal').style.width = 'min(680px, 100%)';
+    overlay.querySelector('#modalClose').addEventListener('click', closeModal);
+  }
+
+  var PRELIEVI_COLS = ['Materiale', 'Descrizione Materiale', 'Quantità', 'Unità misura', 'Divisione', 'Magazzino',
+                       'Ubicazione', 'ODL', 'Macchina', 'Operatore', 'Note', 'Data/Ora', 'ID Prelievo'];
+
+  function buildPrelieviWorkbook(list){
+    var rows = [];
+    list.forEach(function(p){
+      (p.righe || []).forEach(function(r){
+        rows.push({
+          'Materiale': matOf(r), 'Descrizione Materiale': r.descrizione, 'Quantità': r.quantita,
+          'Unità misura': r.um || '', 'Divisione': r.divisione || '', 'Magazzino': r.magazzino || '',
+          'Ubicazione': r.ubicazione || '', 'ODL': p.odl, 'Macchina': p.macchina,
+          'Operatore': p.operatore, 'Note': r.note || '', 'Data/Ora': fmtDateTime(p.dataOra), 'ID Prelievo': p.id
+        });
+      });
+    });
+    var ws = XLSX.utils.json_to_sheet(rows, { header: PRELIEVI_COLS });
+    ws['!cols'] = [{wch:14},{wch:40},{wch:10},{wch:10},{wch:10},{wch:10},{wch:14},{wch:14},{wch:16},{wch:16},{wch:30},{wch:16},{wch:24}];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Prelievi');
+    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  }
+
+  // Download normale del browser (il file finisce nella cartella Download)
+  function downloadArray(filename, arr){
+    var blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 2000);
+  }
+
+  function byDataAsc(x, y){ return (x.dataOra || '').localeCompare(y.dataOra || ''); }
+
+  function exportDaScaricare(){
+    if (!dbAvailable){ toast('Database non disponibile', 'err'); return; }
+    if (!pendingLoaded){ toast('Caricamento in corso, riprova tra un istante', 'err'); return; }
+    var list = Array.from(prelieviPending.values()).sort(byDataAsc);
+    if (list.length === 0){ toast('Nessun prelievo da esportare', 'err'); return; }
+    var fname = 'Prelievi_da_scaricare_SAP_' + todayISO().slice(0,10) + '.xlsx';
+    downloadArray(fname, buildPrelieviWorkbook(list));
+    askConfirm('File scaricato?',
+      'Il file "' + fname + '" contiene ' + list.length + ' prelievi. Se si è scaricato correttamente, segnali come esportati: non verranno più riproposti nel prossimo export.',
+      'Sì, segna come esportati', 'No, lascia da esportare', function(){ markExported(list); });
+  }
+
+  function markExported(list){
+    var now = todayISO();
+    var chunksOf = [];
+    for (var i = 0; i < list.length; i += 400) chunksOf.push(list.slice(i, i + 400));
+    chunksOf.reduce(function(p, chunk){
+      return p.then(function(){
+        var b = dbNS.batch();
+        chunk.forEach(function(pr){ b.update(dbNS.collection('prelievi').doc(pr.id), { esportato: true, dataEsportazione: now }); });
+        return b.commit();
+      });
+    }, Promise.resolve()).then(function(){
+      toast(list.length + ' prelievi segnati come esportati', 'ok');
+    }).catch(function(err){
+      console.error(err);
+      toast('Non sono riuscito a segnare i prelievi come esportati: riprova.', 'err');
+    });
+  }
+
+  function fetchPrelievi(da, a){
+    var q = dbNS.collection('prelievi');
+    if (da) q = q.where('dataOra', '>=', da);
+    if (a) q = q.where('dataOra', '<=', a + 'T23:59:59.999Z');
+    q = q.orderBy('dataOra', 'asc');
+    return q.get().then(function(snap){
+      return snap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); });
+    });
+  }
+
+  function exportStoricoCompleto(){
+    if (!dbAvailable){ toast('Database non disponibile', 'err'); return; }
+    var da = document.getElementById('filtStoricoDa').value;
+    var a = document.getElementById('filtStoricoA').value;
+    fetchPrelievi(da, a).then(function(list){
+      if (list.length === 0){ toast('Nessun prelievo nel periodo selezionato', 'err'); return; }
+      var suffix = (da || a) ? (da || 'inizio') + '_' + (a || 'oggi') : 'completo';
+      downloadArray('Storico_Prelievi_' + suffix + '.xlsx', buildPrelieviWorkbook(list));
+      toast('Storico esportato (' + list.length + ' prelievi)', 'ok');
+    }).catch(function(err){
+      console.error(err);
+      toast('Esportazione non riuscita', 'err');
+    });
+  }
+
+  function pulisciStorico(){
+    if (!dbAvailable){ toast('Database non disponibile', 'err'); return; }
+    var dataLimite = document.getElementById('pulisciData').value;
+    if (!dataLimite){ toast('Seleziona una data limite', 'err'); return; }
+    dbNS.collection('prelievi').where('dataOra', '<', dataLimite).orderBy('dataOra', 'asc').get().then(function(snap){
+      var toDelete = snap.docs.filter(function(d){ return d.data().esportato === true; });
+      if (toDelete.length === 0){ toast('Nessun prelievo esportato da eliminare prima di quella data', 'err'); return; }
+      var html = '<h3>Confermi l\'eliminazione?</h3>' +
+        '<p class="sub">Stai per eliminare definitivamente ' + toDelete.length + ' prelievi già esportati precedenti al ' + fmtDate(dataLimite) + '. Restano comunque nei file Excel già scaricati in precedenza.</p>' +
+        '<div class="modal-actions"><button class="btn" id="mCancel">Annulla</button><button class="btn btn-danger" id="mConfirm">Elimina definitivamente</button></div>';
+      var overlay = openModal(html);
+      overlay.querySelector('#mCancel').addEventListener('click', closeModal);
+      overlay.querySelector('#mConfirm').addEventListener('click', function(){
+        var parts = [];
+        for (var i = 0; i < toDelete.length; i += 400) parts.push(toDelete.slice(i, i + 400));
+        parts.reduce(function(p, part){
+          return p.then(function(){
+            var b = dbNS.batch();
+            part.forEach(function(d){ b.delete(d.ref || dbNS.collection('prelievi').doc(d.id)); });
+            return b.commit();
+          });
+        }, Promise.resolve()).then(function(){
+          closeModal();
+          toast(toDelete.length + ' prelievi eliminati', 'ok');
+        }).catch(function(err){
+          console.error(err);
+          toast('Eliminazione non riuscita', 'err');
+        });
+      });
+    }).catch(function(err){
+      console.error(err);
+      toast('Impossibile leggere lo storico', 'err');
+    });
+  }
+
+  /* ============ INVENTARIO SCREEN ============ */
+  function initInventario(){
+    document.getElementById('invSearchInput').addEventListener('input', debounce(renderInventario, 80));
+    document.getElementById('invFilterStato').addEventListener('change', renderInventario);
+    document.getElementById('btnExportInventario').addEventListener('click', exportInventario);
+    function lockAll(){
+      setInvUnlocked(false);
+      showScreen('preleva');
+      toast('Inventario e Importa dati bloccati', 'ok');
+    }
+    document.getElementById('btnLockInventario').addEventListener('click', lockAll);
+    document.getElementById('btnLockImporta').addEventListener('click', lockAll);
+    var soglia = document.getElementById('fldSoglia');
+    soglia.addEventListener('change', function(){
+      var v = parseFloat(soglia.value);
+      if (isNaN(v) || v < 0) v = 0;
+      if (dbAvailable) dbNS.doc('settings/app').set(Object.assign({}, settings, { sogliaScortaBassa: v }));
+    });
+  }
+
+  function renderUltimoImportInfo(){
+    var el = document.getElementById('ultimoImportInfo');
+    if (!el) return;
+    if (settings.ultimoImport){
+      el.innerHTML = 'Ultimo import: <b>' + fmtDateTime(settings.ultimoImport) + '</b> &middot; ' + settings.righeImportate + ' righe lette dal file.';
+    } else {
+      el.textContent = 'Nessun import ancora effettuato.';
+    }
+  }
+
+  function renderInventario(){
+    var statsEl = document.getElementById('inventarioStats');
+    var all = Array.from(inventario.values());
+    var esauriti = all.filter(function(i){ return stockStatus(i.quantita) === 'esaurito'; }).length;
+    var bassi = all.filter(function(i){ return stockStatus(i.quantita) === 'bassa'; }).length;
+    statsEl.innerHTML =
+      '<div class="stat-tile"><div class="n mono">' + all.length + '</div><div class="l">Righe a inventario</div></div>' +
+      '<div class="stat-tile"><div class="n mono">' + bassi + '</div><div class="l">In scorta bassa</div></div>' +
+      '<div class="stat-tile"><div class="n mono">' + esauriti + '</div><div class="l">Esauriti</div></div>' +
+      '<div class="stat-tile"><div class="n mono">' + uniqSorted(all.map(function(i){ return matOf(i); })).length + '</div><div class="l">Materiali distinti</div></div>';
+
+    var tbody = document.getElementById('inventarioTbody');
+    if (!dbAvailable){
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><b>Database non connesso</b></div></td></tr>';
+      return;
+    }
+    var q = document.getElementById('invSearchInput').value;
+    var stato = document.getElementById('invFilterStato').value;
+    var rows = all.filter(function(item){
+      if (stato && stockStatus(item.quantita) !== stato) return false;
+      if (!q.trim()) return true;
+      return matchTokens(matOf(item) + ' ' + (item.descrizione || '') + ' ' + (item.ubicazione || '') + ' ' + (item.note || ''), q);
+    }).sort(cmpMateriale);
+
+    if (rows.length === 0){
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><b>' + (all.length ? 'Nessun risultato' : 'Inventario vuoto') + '</b>' + (all.length ? '' : 'Importa il file Excel dalla sezione "Importa dati".') + '</div></td></tr>';
+      return;
+    }
+    var total = rows.length;
+    rows = rows.slice(0, INV_LIMIT);
+    tbody.innerHTML = rows.map(function(item){
+      return '<tr data-row="' + esc(item.id) + '">' +
+        '<td class="mono">' + esc(matOf(item)) + '</td>' +
+        '<td class="cell-desc">' + esc(item.descrizione) + '</td>' +
+        '<td class="cell-muted">' + esc(item.divisione) + '</td>' +
+        '<td class="cell-muted">' + esc(item.magazzino) + '</td>' +
+        '<td class="cell-muted">' + esc(item.um) + '</td>' +
+        '<td class="mono editable-cell" data-edit="quantita" data-id="' + esc(item.id) + '">' + fmtNum(item.quantita) + ' ' + stockBadge(item.quantita) + '</td>' +
+        '<td class="editable-cell" data-edit="ubicazione" data-id="' + esc(item.id) + '">' + (item.ubicazione ? esc(item.ubicazione) : '<span class="cell-muted">+ ubicazione</span>') + '</td>' +
+        '<td class="cell-note editable-cell" data-edit="note" data-id="' + esc(item.id) + '">' + (item.note ? esc(item.note) : '<span class="cell-muted">+ nota</span>') + '</td>' +
+        '<td><button class="btn btn-sm" data-hist="' + esc(item.id) + '">Storico</button></td>' +
+      '</tr>';
+    }).join('') + (total > INV_LIMIT ? '<tr><td colspan="9" class="cell-muted">Mostrate le prime ' + INV_LIMIT + ' righe di ' + total + ': restringi la ricerca.</td></tr>' : '');
+    tbody.querySelectorAll('[data-edit]').forEach(function(cell){
+      cell.addEventListener('click', function(){ openEditModal(cell.getAttribute('data-id'), cell.getAttribute('data-edit')); });
+    });
+    tbody.querySelectorAll('[data-hist]').forEach(function(btn){
+      btn.addEventListener('click', function(){ showInventarioHistory(btn.getAttribute('data-hist')); });
+    });
+  }
+
+  // Esporta l'inventario con le STESSE colonne del file di lavoro, così si può rimettere sul PC
+  var INVENTARIO_COLS = ['Divisione', 'Materiale', 'Descrizione materiale', 'Magazzino', 'Unità misura di base', 'Utilizz. liber.', 'Ubicazione', 'Note'];
+
+  function buildInventarioWorkbook(){
+    var rows = Array.from(inventario.values()).sort(cmpMateriale).map(function(i){
+      var mat = matOf(i);
+      if (/^[1-9]\d{0,14}$/.test(mat)) mat = Number(mat);   // codici solo numeri (come nel file SAP) restano numeri; con zeri iniziali restano testo
+      return {
+        'Divisione': i.divisione || '', 'Materiale': mat, 'Descrizione materiale': i.descrizione || '',
+        'Magazzino': i.magazzino || '', 'Unità misura di base': i.um || '', 'Utilizz. liber.': Number(i.quantita) || 0,
+        'Ubicazione': i.ubicazione || '', 'Note': i.note || ''
+      };
+    });
+    var ws = XLSX.utils.json_to_sheet(rows, { header: INVENTARIO_COLS });
+    ws['!cols'] = [{wch:10},{wch:16},{wch:44},{wch:11},{wch:12},{wch:14},{wch:16},{wch:44}];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+    return { data: XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), count: rows.length };
+  }
+
+  function exportInventario(){
+    if (inventario.size === 0){ toast('L\'inventario è vuoto: niente da esportare', 'err'); return; }
+    var out = buildInventarioWorkbook();
+    downloadArray('Inventario_Magazzino_' + todayISO().slice(0,10) + '.xlsx', out.data);
+    toast('Inventario esportato (' + out.count + ' righe)', 'ok');
+  }
+
+  function openEditModal(itemId, field){
+    var item = inventario.get(itemId);
+    if (!item) return;
+    var labels = { quantita: 'Quantità', ubicazione: 'Ubicazione', note: 'Nota' };
+    var isNumber = field === 'quantita';
+    var currentVal = item[field] || (isNumber ? 0 : '');
+    var inputHtml = field === 'note'
+      ? '<textarea class="input" id="editVal">' + esc(currentVal) + '</textarea>'
+      : '<input class="input" id="editVal" type="' + (isNumber ? 'number' : 'text') + '"' + (isNumber ? ' step="any"' : '') + ' value="' + esc(currentVal) + '">';
+    var html = '<h3>Modifica ' + labels[field] + '</h3>' +
+      '<p class="sub mono">' + esc(matOf(item)) + ' &middot; ' + esc(item.descrizione) + '</p>' +
+      '<div class="modal-fields">' +
+        '<div class="field"><label>' + labels[field] + '</label>' + inputHtml + '</div>' +
+        '<div class="field"><label>Il tuo nome (per il log modifiche) *</label><input class="input" id="editOperatore" type="text" placeholder="Chi effettua la modifica"></div>' +
+      '</div>' +
+      '<div class="modal-actions"><button class="btn" id="mCancel">Annulla</button><button class="btn btn-primary" id="mSave">Salva</button></div>';
+    var overlay = openModal(html);
+    overlay.querySelector('#mCancel').addEventListener('click', closeModal);
+    overlay.querySelector('#editVal').focus();
+    overlay.querySelector('#mSave').addEventListener('click', function(){
+      var newVal = overlay.querySelector('#editVal').value;
+      var operatore = overlay.querySelector('#editOperatore').value.trim();
+      if (!operatore){ toast('Indica chi effettua la modifica', 'err'); return; }
+      if (isNumber){
+        newVal = parseQty(newVal);
+        if (newVal === null || newVal < 0){ toast('Quantità non valida', 'err'); return; }
+      } else {
+        newVal = newVal.trim();
+      }
+      if (String(newVal) === String(currentVal)){ closeModal(); return; }
+      var now = todayISO();
+      inventoryTransaction([bucketOf(itemId)], function(items){
+        var it = items[bucketOf(itemId)][itemId];
+        if (!it){ var e = new Error('missing'); e.code = 'missing'; throw e; }
+        var storico = Array.isArray(it.storicoModifiche) ? it.storicoModifiche.slice(-19) : [];
+        storico.push({ campo: field, vecchio: it[field] || (isNumber ? 0 : ''), nuovo: newVal, operatore: operatore, dataOra: now });
+        it[field] = newVal;
+        it.storicoModifiche = storico;
+        it.aggiornatoIl = now;
+      }).then(function(){
+        closeModal();
+        toast('Modifica salvata', 'ok');
+      }).catch(function(err){
+        console.error(err);
+        toast(err && err.code === 'missing' ? 'Questa riga non esiste più (importazione recente?)' : 'Errore nel salvataggio', 'err');
+      });
+    });
+  }
+
+  function showInventarioHistory(itemId){
+    var item = inventario.get(itemId);
+    if (!item) return;
+    var hist = (item.storicoModifiche || []).slice().reverse();
+    var labels = { quantita: 'Quantità', ubicazione: 'Ubicazione', note: 'Nota' };
+    var html = '<h3>Storico modifiche</h3>' +
+      '<p class="sub mono">' + esc(matOf(item)) + ' &middot; ' + esc(item.descrizione) + '</p>' +
+      (hist.length === 0 ? '<p class="sub">Nessuna modifica manuale registrata.</p>' :
+        '<ul class="hist-list">' + hist.map(function(h){
+          return '<li><b>' + esc(labels[h.campo] || h.campo) + '</b>: "' + esc(h.vecchio) + '" &rarr; "' + esc(h.nuovo) + '" — ' + esc(h.operatore) + ', ' + fmtDateTime(h.dataOra) + '</li>';
+        }).join('') + '</ul>') +
+      '<div class="modal-actions"><button class="btn btn-primary" id="mClose">Chiudi</button></div>';
+    var overlay = openModal(html);
+    overlay.querySelector('#mClose').addEventListener('click', closeModal);
+  }
+
+  /* ============ IMPORTA SCREEN ============ */
+  // Le intestazioni vengono normalizzate (minuscolo, senza accenti, punti/trattini -> spazio)
+  var HEADER_MAP = {
+    'divisione': 'divisione', 'div': 'divisione',
+    'materiale': 'materiale', 'cat fs': 'materiale', 'catfs': 'materiale', 'categorico': 'materiale',
+    'codice materiale': 'materiale', 'codice': 'materiale',
+    'descrizione materiale': 'descrizione', 'descrizione': 'descrizione', 'testo breve materiale': 'descrizione',
+    'descr materiale': 'descrizione',
+    'magazzino': 'magazzino', 'mag': 'magazzino',
+    'unita misura': 'um', 'unita di misura': 'um', 'um': 'um', 'u m': 'um', 'udm': 'um', 'unita': 'um',
+    'unita misura di base': 'um', 'unita di misura di base': 'um', 'um base': 'um', 'ume': 'um',
+    'utilizz liber': 'quantita', 'utilizz libero': 'quantita', 'utilizzo libero': 'quantita',
+    'quantita utilizzo libero': 'quantita', 'quantita': 'quantita', 'qta': 'quantita', 'qty': 'quantita',
+    'ubicazione': 'ubicazione', 'ubicazioni': 'ubicazione',
+    'note': 'note', 'nota': 'note', 'annotazioni': 'note'
+  };
+  var pendingImport = null;   // { rows, fields, fileName, sheetName, scartate, scartateQty }
+
+  function initImporta(){
+    document.getElementById('fileInput').addEventListener('change', function(e){
+      var file = e.target.files[0];
+      if (file) handleImportFile(file);
+    });
+    var drop = document.querySelector('.import-drop');
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.style.borderColor = 'var(--accent)'; });
+    drop.addEventListener('dragleave', function(){ drop.style.borderColor = ''; });
+    drop.addEventListener('drop', function(e){
+      e.preventDefault(); drop.style.borderColor = '';
+      var file = e.dataTransfer.files[0];
+      if (file) handleImportFile(file);
+    });
+  }
+
+  function handleImportFile(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        var res = extractFromWorkbook(wb);
+        if (!res){
+          toast('Non trovo le colonne "Materiale" e "Utilizz. liber." in nessun foglio del file', 'err');
+          return;
+        }
+        res.fileName = file.name;
+        if (!res.rows.length){ toast('Nessuna riga valida trovata nel file', 'err'); return; }
+        pendingImport = res;
+        renderImportPreview();
+      } catch(err){
+        console.error(err);
+        toast('Impossibile leggere il file. Verifica che sia un Excel valido.', 'err');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function mapHeaderRow(row){
+    var byIndex = {}, fields = [];
+    for (var c = 0; c < row.length; c++){
+      var f = HEADER_MAP[normHeader(row[c])];
+      if (f && fields.indexOf(f) === -1){ byIndex[c] = f; fields.push(f); }
+    }
+    return { byIndex: byIndex, fields: fields };
+  }
+
+  // cerca in ogni foglio la riga di intestazione (anche se sotto a righe di titolo)
+  function extractFromWorkbook(wb){
+    for (var s = 0; s < wb.SheetNames.length; s++){
+      var aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[s]], { header: 1, defval: '', raw: true });
+      for (var i = 0; i < Math.min(aoa.length, 25); i++){
+        var m = mapHeaderRow(aoa[i]);
+        if (m.fields.indexOf('materiale') !== -1 && m.fields.indexOf('quantita') !== -1){
+          return buildRows(aoa, i, m, wb.SheetNames[s]);
+        }
+      }
+    }
+    return null;
+  }
+
+  function buildRows(aoa, headerIdx, m, sheetName){
+    var rows = [], scartate = 0, scartateQty = 0;
+    var idxs = Object.keys(m.byIndex);
+    for (var i = headerIdx + 1; i < aoa.length; i++){
+      var line = aoa[i];
+      var o = { divisione: '', materiale: '', descrizione: '', magazzino: '', um: '', quantita: null, ubicazione: '', note: '' };
+      var any = false;
+      for (var k = 0; k < idxs.length; k++){
+        var f = m.byIndex[idxs[k]], v = line[idxs[k]];
+        if (v !== '' && v != null) any = true;
+        if (f === 'quantita') o.quantita = parseQty(v);
+        else o[f] = String(v == null ? '' : v).trim();
+      }
+      if (!any) continue;                              // riga vuota
+      if (!o.materiale){ scartate++; continue; }        // righe di totale / senza materiale
+      if (o.quantita === null){ scartateQty++; continue; }
+      rows.push(o);
+    }
+    return { rows: rows, fields: m.fields, sheetName: sheetName, scartate: scartate, scartateQty: scartateQty };
+  }
+
+  /* Confronta le righe del file con l'inventario attuale e prepara le operazioni.
+     - quantità, descrizione, U.M.: vince il file
+     - ubicazione e note: vince il file solo se la cella è compilata (cella vuota = non cancella)
+     - una riga si riconosce da Divisione + Materiale + Magazzino, quindi cambiare ubicazione o nota
+       sul PC aggiorna la riga esistente */
+  function buildImportPlan(rows, fields){
+    var hasUb = fields.indexOf('ubicazione') !== -1, hasNote = fields.indexOf('note') !== -1;
+    var existingByKey = new Map();
+    inventario.forEach(function(it){
+      var k = keyOf(it.divisione, matOf(it), it.magazzino);
+      if (!existingByKey.has(k)) existingByKey.set(k, []);
+      existingByKey.get(k).push(it);
+    });
+    existingByKey.forEach(function(arr){ arr.sort(function(a, b){ return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); }); });
+
+    var groups = new Map();
+    rows.forEach(function(r){
+      var k = keyOf(r.divisione, r.materiale, r.magazzino);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    });
+
+    var usedIds = new Set();
+    inventario.forEach(function(it){ usedIds.add(it.id); });
+    var pairedIds = new Set();
+    var ops = [];
+    var st = { nuove: 0, aggiornate: 0, invariate: 0, noteImport: 0, noteSostituite: 0, ubicAgg: 0, duplicati: 0, ambigui: 0 };
+
+    groups.forEach(function(rs, k){
+      if (rs.length > 1){
+        st.duplicati++;
+        // righe ripetute senza ubicazioni diverse e compilate: l'abbinamento con l'app può solo seguire l'ordine
+        var ubs = rs.map(function(r){ return normKey(r.ubicazione); });
+        if (ubs.some(function(u){ return !u; }) || new Set(ubs).size !== ubs.length) st.ambigui++;
+      }
+      var ex = (existingByKey.get(k) || []).slice();
+      var assigned = new Array(rs.length);
+      // 1) abbina prima per ubicazione uguale
+      rs.forEach(function(r, idx){
+        if (!r.ubicazione) return;
+        for (var j = 0; j < ex.length; j++){
+          if (ex[j] && normKey(ex[j].ubicazione) === normKey(r.ubicazione)){ assigned[idx] = ex[j]; ex[j] = null; break; }
+        }
+      });
+      // 2) le restanti in ordine
+      rs.forEach(function(r, idx){
+        if (assigned[idx]) return;
+        for (var j = 0; j < ex.length; j++){
+          if (ex[j]){ assigned[idx] = ex[j]; ex[j] = null; break; }
+        }
+      });
+      rs.forEach(function(r, idx){
+        var prev = assigned[idx] || null;
+        var prevUb = prev ? (prev.ubicazione || '') : '';
+        var prevNote = prev ? (prev.note || '') : '';
+        var next = {
+          materiale: r.materiale, divisione: r.divisione, magazzino: r.magazzino,
+          descrizione: r.descrizione || (prev ? (prev.descrizione || '') : ''),
+          um: r.um || (prev ? (prev.um || '') : ''),
+          quantita: r.quantita,
+          ubicazione: (hasUb && r.ubicazione) ? r.ubicazione : prevUb,
+          note: (hasNote && r.note) ? r.note : prevNote
+        };
+        if (!prev){
+          var id = makeItemId(r.divisione, r.materiale, r.magazzino);
+          if (usedIds.has(id)){ var n = 2; while (usedIds.has(id + '__' + n)) n++; id = id + '__' + n; }
+          usedIds.add(id);
+          ops.push({ id: id, isNew: true, next: next, changed: true });
+          st.nuove++;
+          if (next.note) st.noteImport++;
+          if (next.ubicazione) st.ubicAgg++;
+          return;
+        }
+        pairedIds.add(prev.id);
+        var patch = {};
+        ['materiale', 'divisione', 'magazzino', 'descrizione', 'um', 'ubicazione', 'note'].forEach(function(f){
+          var before = f === 'materiale' ? matOf(prev) : (prev[f] || '');
+          if (before !== next[f]) patch[f] = next[f];
+        });
+        if (Number(prev.quantita) !== next.quantita) patch.quantita = next.quantita;
+        var noteChanged = ('note' in patch), ubChanged = ('ubicazione' in patch);
+        var changed = Object.keys(patch).length > 0;
+        if (noteChanged){ st.noteImport++; if (prevNote) st.noteSostituite++; }
+        if (ubChanged) st.ubicAgg++;
+        if (changed) st.aggiornate++; else st.invariate++;
+        ops.push({ id: prev.id, isNew: false, next: next, patch: patch, changed: changed,
+                   noteChanged: noteChanged, ubChanged: ubChanged, prevNote: prevNote, prevUb: prevUb });
+      });
+    });
+
+    var absent = [];
+    inventario.forEach(function(it){ if (!pairedIds.has(it.id)) absent.push(it); });
+    return { ops: ops, absent: absent, stats: st, hasUb: hasUb, hasNote: hasNote };
+  }
+
+  function renderImportPreview(){
+    var area = document.getElementById('importPreviewArea');
+    var pi = pendingImport;
+    var plan = buildImportPlan(pi.rows, pi.fields);
+    var st = plan.stats;
+    var sample = pi.rows.slice(0, 8);
+
+    var items = [];
+    if (plan.hasNote) items.push('<li>Note lette dal file: <b>' + st.noteImport + '</b>' + (st.noteSostituite ? ' — <b>' + st.noteSostituite + '</b> sostituiscono una nota diversa già presente nell\'app' : '') + '.</li>');
+    else items.push('<li>Il file non ha la colonna <i>note</i>: le note già scritte nell\'app restano invariate.</li>');
+    if (plan.hasUb) items.push('<li>Ubicazioni impostate/aggiornate dal file: <b>' + st.ubicAgg + '</b>.</li>');
+    else items.push('<li>Il file non ha la colonna <i>ubicazione</i>: le ubicazioni già presenti nell\'app restano invariate.</li>');
+    if (plan.absent.length) items.push('<li class="warn">' + plan.absent.length + ' righe presenti nell\'app non compaiono nel file (con l\'opzione qui sotto puoi azzerarne la quantità).</li>');
+    if (st.duplicati) items.push('<li>' + st.duplicati + ' materiali compaiono su più righe (stessa Divisione e Magazzino): le righe restano separate e vengono abbinate a quelle dell\'app per ubicazione.</li>');
+    if (st.ambigui) items.push('<li class="warn">In ' + st.ambigui + ' di questi le righe ripetute non hanno ubicazioni diverse e compilate: l\'abbinamento segue solo l\'ordine del file, quindi le quantità potrebbero finire scambiate tra le righe. Compila l\'ubicazione su tutte le righe ripetute.</li>');
+    if (pi.scartate) items.push('<li class="warn">' + pi.scartate + ' righe senza Materiale ignorate (es. totali).</li>');
+    if (pi.scartateQty) items.push('<li class="bad">' + pi.scartateQty + ' righe con quantità mancante o non leggibile ignorate.</li>');
+
+    area.innerHTML =
+      '<div class="card" style="padding:16px; margin-top:6px;">' +
+        '<p style="margin:0 0 4px; font-size:.9rem;"><b>' + esc(pi.fileName) + '</b> &middot; foglio "' + esc(pi.sheetName) + '" &middot; <b>' + pi.rows.length + ' righe</b> valide. Anteprima delle prime ' + sample.length + ':</p>' +
+        '<div class="table-wrap" style="margin:10px 0 16px;"><table class="dt"><thead><tr><th>Divisione</th><th>Materiale</th><th>Descrizione</th><th>Magazzino</th><th>U.M.</th><th>Quantità</th><th>Ubicazione</th><th>Nota</th></tr></thead><tbody>' +
+        sample.map(function(r){
+          return '<tr><td>' + esc(r.divisione) + '</td><td class="mono">' + esc(r.materiale) + '</td><td>' + esc(r.descrizione) + '</td><td>' + esc(r.magazzino) + '</td><td>' + esc(r.um) + '</td><td class="mono">' + fmtNum(r.quantita) + '</td><td>' + esc(r.ubicazione) + '</td><td class="cell-note">' + esc(r.note) + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+        '<div class="stat-row">' +
+          '<div class="stat-tile"><div class="n mono">' + st.nuove + '</div><div class="l">Righe nuove</div></div>' +
+          '<div class="stat-tile"><div class="n mono">' + st.aggiornate + '</div><div class="l">Righe da aggiornare</div></div>' +
+          '<div class="stat-tile"><div class="n mono">' + st.invariate + '</div><div class="l">Righe invariate</div></div>' +
+          '<div class="stat-tile"><div class="n mono">' + plan.absent.length + '</div><div class="l">Nell\'app ma non nel file</div></div>' +
+        '</div>' +
+        '<ul class="import-list">' + items.join('') + '</ul>' +
+        '<div class="import-opts">' +
+          '<label><input type="checkbox" id="optZero"> Azzera la quantità delle righe presenti nell\'app ma assenti nel file (usa questa opzione solo se il file contiene TUTTO il magazzino, come un export SAP completo)</label>' +
+        '</div>' +
+        '<button class="btn btn-primary" id="btnConfirmImport">Conferma importazione</button>' +
+      '</div>';
+    document.getElementById('btnConfirmImport').addEventListener('click', confirmImport);
+  }
+
+  function confirmImport(){
+    if (!dbAvailable){ toast('Database non disponibile', 'err'); return; }
+    if (!pendingImport) return;
+    var btn = document.getElementById('btnConfirmImport');
+    // ricalcolo sullo stato più recente dell'inventario (potrebbe essere cambiato dopo l'anteprima)
+    var plan = buildImportPlan(pendingImport.rows, pendingImport.fields);
+    var zero = document.getElementById('optZero') && document.getElementById('optZero').checked;
+    var now = todayISO();
+
+    // raggruppa per blocco: una transazione per blocco
+    var byBucket = {};
+    function spec(b){ return byBucket[b] || (byBucket[b] = { ops: [], zero: [] }); }
+    plan.ops.forEach(function(op){
+      if (op.isNew || op.changed) spec(bucketOf(op.id)).ops.push(op);
+    });
+    var azzerate = 0;
+    if (zero){
+      plan.absent.forEach(function(it){
+        if (Number(it.quantita) !== 0){ azzerate++; spec(bucketOf(it.id)).zero.push(it.id); }
+      });
+    }
+    var buckets = Object.keys(byBucket);
+    var total = buckets.length, idx = 0, done = 0;
+
+    function applyBucket(b){
+      var sp = byBucket[b];
+      return inventoryTransaction([Number(b)], function(items){
+        var mine = items[Number(b)];
+        sp.ops.forEach(function(op){
+          var cur = mine[op.id];
+          if (op.isNew || !cur){
+            mine[op.id] = Object.assign({}, op.next, { storicoModifiche: [], aggiornatoIl: now });
+            return;
+          }
+          var storico = Array.isArray(cur.storicoModifiche) ? cur.storicoModifiche.slice(-17) : [];
+          if (op.noteChanged) storico.push({ campo: 'note', vecchio: op.prevNote, nuovo: op.next.note, operatore: 'Import da file', dataOra: now });
+          if (op.ubChanged) storico.push({ campo: 'ubicazione', vecchio: op.prevUb, nuovo: op.next.ubicazione, operatore: 'Import da file', dataOra: now });
+          mine[op.id] = Object.assign({}, cur, op.patch, { storicoModifiche: storico, aggiornatoIl: now });
+        });
+        sp.zero.forEach(function(id){
+          if (mine[id]){ mine[id].quantita = 0; mine[id].aggiornatoIl = now; }
+        });
+      });
+    }
+
+    btn.disabled = true;
+    btn.textContent = total ? 'Importazione in corso… 0%' : 'Nessuna modifica da scrivere…';
+    function nextTask(){
+      if (idx >= total) return Promise.resolve();
+      var b = buckets[idx++];
+      return applyBucket(b).then(function(){
+        done++;
+        btn.textContent = 'Importazione in corso… ' + Math.round(100 * done / total) + '%';
+        return nextTask();
+      });
+    }
+    var workers = [];
+    for (var w = 0; w < Math.min(4, total); w++) workers.push(nextTask());
+
+    var fileRows = pendingImport.rows.length;
+    Promise.all(workers).then(function(){
+      return dbNS.doc('settings/app').set(Object.assign({}, settings, { ultimoImport: todayISO(), righeImportate: fileRows }));
+    }).then(function(){
+      var st = plan.stats;
+      toast('Importazione completata: ' + st.nuove + ' nuove, ' + st.aggiornate + ' aggiornate, ' + st.invariate + ' invariate' + (azzerate ? ', ' + azzerate + ' azzerate' : ''), 'ok');
+      pendingImport = null;
+      document.getElementById('importPreviewArea').innerHTML = '';
+      document.getElementById('fileInput').value = '';
+    }).catch(function(err){
+      console.error(err);
+      toast(err && err.code === 'bucket-full'
+        ? 'Inventario troppo grande per il database: contattami per aumentare i blocchi.'
+        : 'Errore durante l\'importazione: alcune righe potrebbero non essere state scritte. Riprova: le righe già aggiornate vengono saltate.', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Conferma importazione';
+    });
+  }
+
+  // Avvio: va chiamato per ultimo, quando tutte le funzioni e variabili sono definite
+  initPin();
+
+})();
+</script>
+</body>
+</html>
