@@ -1311,7 +1311,11 @@
       // così Operatore/ODL/Macchina si vedono senza dover cercare e toccare la barra in basso.
       if (eraVuoto) setCartOpen(true);
     });
-    overlay.querySelector('#modalQty').focus();
+    // seleziona tutto il valore predefinito "1": chi digita subito il numero sul telefono lo sostituisce
+    // invece di ritrovarsi la cifra "incollata" dopo (es. "1" + "3" digitato = "13" invece di "3").
+    var qtyInput = overlay.querySelector('#modalQty');
+    qtyInput.focus();
+    qtyInput.select();
   }
 
   function renderCart(){
@@ -1788,6 +1792,7 @@
     overlay.querySelector('#mCancel').addEventListener('click', closeModal);
     var editInput = overlay.querySelector('#editVal');
     editInput.focus();
+    editInput.select();      // seleziona il valore attuale: si può sostituire subito digitando, senza doverlo cancellare a mano
     if (field !== 'note') editInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') overlay.querySelector('#mSave').click(); });
     overlay.querySelector('#mSave').addEventListener('click', function(){
       var newVal = overlay.querySelector('#editVal').value;
