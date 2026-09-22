@@ -219,6 +219,7 @@
   table.dt tbody tr:hover{ background:var(--paper-2); }
   table.dt tbody tr.row-clickable{ cursor:pointer; }
   table.dt tbody tr.row-clickable .btn{ pointer-events:none; }
+  table.dt tbody tr.row-clickable .btn.row-action{ pointer-events:auto; }
   .cell-muted{ color:var(--ink-faint); }
   .cell-desc{ max-width:280px; }
   .cell-note{ max-width:280px; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -392,8 +393,8 @@
     table.dt.cards .c-edit:active{ background:var(--accent-soft); }
     table.dt.cards .c-qty.editable-cell{ padding:5px 10px; background:var(--paper-2); border:1px solid var(--line); border-radius:9px; cursor:pointer; }
     table.dt.cards .c-qty.editable-cell::after{ content:"\270E"; margin-left:8px; color:var(--ink-faint); font-size:.85rem; }
-    table.dt.cards .c-act{ order:6; flex:0 0 100%; margin-top:4px; }
-    table.dt.cards .c-act .btn{ width:100%; justify-content:center; min-height:44px; font-size:.9rem; }
+    table.dt.cards .c-act{ order:6; flex:0 0 100%; margin-top:4px; display:flex; gap:8px; }
+    table.dt.cards .c-act .btn{ flex:1 1 0; justify-content:center; min-height:44px; font-size:.9rem; }
   }
 
   /* ============ TELEFONO (fino a 760px) ============ */
@@ -1474,12 +1475,22 @@
         '<td class="c-meta" data-label="Macchina">' + esc(p.macchina) + '</td>' +
         '<td class="mono c-meta" data-label="Articoli">' + nArt + '</td>' +
         '<td class="c-qty">' + (p.esportato ? '<span class="badge good">Esportato</span>' : '<span class="badge warn">Da esportare</span>') + '</td>' +
-        '<td class="c-act"><button class="btn btn-sm" type="button">Dettaglio</button></td>' +
+        '<td class="c-act">' +
+          '<button class="btn btn-sm" type="button">Dettaglio</button>' +
+          '<button class="btn btn-sm btn-danger row-action" type="button" data-elimina="' + esc(p.id) + '">Elimina</button>' +
+        '</td>' +
       '</tr>';
     }).join('');
     // tutta la riga/scheda è cliccabile (non solo il piccolo pulsante Dettaglio, più facile da toccare sul telefono)
     tbody.querySelectorAll('[data-row]').forEach(function(row){
       row.addEventListener('click', function(){ showPrelievoDetail(row.getAttribute('data-row')); });
+    });
+    // pulsante Elimina direttamente in elenco: non serve aprire il dettaglio per cancellare un prelievo
+    tbody.querySelectorAll('[data-elimina]').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        eliminaPrelievo(btn.getAttribute('data-elimina'));
+      });
     });
   }
 
