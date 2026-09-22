@@ -1498,18 +1498,72 @@
     var p = prelievi.get(id);
     if (!p) return;
     var righe = p.righe || [];
+    var soloUnaRiga = righe.length <= 1;
     var html = '<h3>Prelievo del ' + fmtDateTime(p.dataOra) + '</h3>' +
       '<p class="sub">Operatore: <b>' + esc(p.operatore) + '</b> &middot; ODL: <b>' + esc(p.odl) + '</b> &middot; Macchina: <b>' + esc(p.macchina) + '</b></p>' +
-      '<div class="table-wrap" style="margin-bottom:16px;"><table class="dt"><thead><tr><th>Materiale</th><th>Descrizione</th><th>Qtà</th><th>Ubicazione</th><th>Nota</th></tr></thead><tbody>' +
-      righe.map(function(r){
-        return '<tr><td class="mono">' + esc(matOf(r)) + '</td><td>' + esc(r.descrizione) + '</td><td class="mono">' + fmtNum(r.quantita) + ' ' + esc(r.um || '') + '</td><td>' + esc(r.ubicazione) + '</td><td>' + esc(r.note || '') + '</td></tr>';
+      (soloUnaRiga ? '' : '<p class="list-note">Ogni materiale si può togliere singolarmente (ad es. se uno va scaricato su SAP e un altro va rimesso a magazzino).</p>') +
+      '<div class="table-wrap" style="margin-bottom:16px;"><table class="dt"><thead><tr><th>Materiale</th><th>Descrizione</th><th>Qtà</th><th>Ubicazione</th><th>Nota</th><th></th></tr></thead><tbody>' +
+      righe.map(function(r, idx){
+        return '<tr><td class="mono">' + esc(matOf(r)) + '</td><td>' + esc(r.descrizione) + '</td><td class="mono">' + fmtNum(r.quantita) + ' ' + esc(r.um || '') + '</td><td>' + esc(r.ubicazione) + '</td><td>' + esc(r.note || '') +
+          '</td><td><button class="btn btn-sm btn-danger" type="button" data-idx="' + idx + '">Togli</button></td></tr>';
       }).join('') +
       '</tbody></table></div>' +
-      '<div class="modal-actions"><button class="btn btn-danger" id="btnEliminaPrelievo" style="margin-right:auto;">Elimina prelievo</button><button class="btn btn-primary" id="modalClose">Chiudi</button></div>';
+      '<div class="modal-actions"><button class="btn btn-danger" id="btnEliminaPrelievo" style="margin-right:auto;">Elimina tutto il prelievo</button><button class="btn btn-primary" id="modalClose">Chiudi</button></div>';
     var overlay = openModal(html);
     overlay.querySelector('.modal').style.width = 'min(680px, 100%)';
     overlay.querySelector('#modalClose').addEventListener('click', closeModal);
     overlay.querySelector('#btnEliminaPrelievo').addEventListener('click', function(){ eliminaPrelievo(id); });
+    overlay.querySelectorAll('[data-idx]').forEach(function(btn){
+      btn.addEventListener('click', function(){ eliminaRigaPrelievo(id, parseInt(btn.getAttribute('data-idx'), 10)); });
+    });
+  }
+
+  // Toglie UN solo materiale da un prelievo con più righe, ripristinandone la quantità in inventario
+  // (utile quando parte del prelievo va scaricata su SAP e parte va rimessa a magazzino).
+  function eliminaRigaPrelievo(prelievoId, idx){
+    var p = prelievi.get(prelievoId);
+    if (!p) return;
+    var righe = p.righe || [];
+    var riga = righe[idx];
+    if (!riga) return;
+    var esportato = !!p.esportato;
+    var nuoveRighe = righe.slice();
+    nuoveRighe.splice(idx, 1);
+    var ultimoRimasto = nuoveRighe.length === 0;
+    var testo = (esportato
+      ? 'Questo prelievo risulta già esportato su SAP: togliendo "' + matOf(riga) + '" la quantità NON torna automaticamente in inventario (correggila a mano se serve).'
+      : 'La quantità di "' + matOf(riga) + '" (' + fmtNum(riga.quantita) + ' ' + esc(riga.um || '') + ') tornerà disponibile in inventario.')
+      + (ultimoRimasto ? ' È l\'ultimo materiale rimasto: il prelievo verrà eliminato del tutto.' : ' Gli altri materiali del prelievo restano come sono.');
+    askConfirm('Togliere questo materiale dal prelievo?', testo, 'Togli', 'Annulla', function(){
+      if (!dbAvailable){ toast('Database non disponibile', 'err'); return; }
+      var prelRef = dbNS.collection('prelievi').doc(prelievoId);
+      var nuovoDoc = Object.assign({}, p, { righe: nuoveRighe });
+      var okMsg = ultimoRimasto ? 'Prelievo eliminato' : 'Materiale tolto dal prelievo';
+      if (esportato){
+        // già esportato: si tocca solo il record, mai la quantità
+        (ultimoRimasto ? prelRef.delete() : prelRef.set(nuovoDoc)).then(function(){
+          closeModal();
+          toast(okMsg, 'ok');
+          // aggiornamento "ottimista" locale: non aspetta il giro di rete per mostrare subito il dettaglio corretto
+          if (!ultimoRimasto){ prelievi.set(prelievoId, nuovoDoc); showPrelievoDetail(prelievoId); }
+        }).catch(function(err){ console.error(err); toast('Operazione non riuscita: riprova', 'err'); });
+        return;
+      }
+      inventoryTransaction(riga.itemId ? [bucketOf(riga.itemId)] : [], function(items, tx){
+        if (riga.itemId){
+          var it = items[bucketOf(riga.itemId)][riga.itemId];
+          if (it){ it.quantita = round3((Number(it.quantita) || 0) + (Number(riga.quantita) || 0)); it.aggiornatoIl = todayISO(); }
+        }
+        if (ultimoRimasto) tx.delete(prelRef); else tx.set(prelRef, nuovoDoc);
+      }).then(function(){
+        closeModal();
+        toast(okMsg + ' e quantità ripristinata', 'ok');
+        if (!ultimoRimasto){ prelievi.set(prelievoId, nuovoDoc); showPrelievoDetail(prelievoId); }
+      }).catch(function(err){
+        console.error(err);
+        toast('Operazione non riuscita: riprova', 'err');
+      });
+    });
   }
 
   function eliminaPrelievo(id){
