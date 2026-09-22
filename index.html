@@ -1184,6 +1184,15 @@
     document.getElementById('cartBar').addEventListener('click', function(){ setCartOpen(true); });
     document.getElementById('btnCartClose').addEventListener('click', function(){ setCartOpen(false); });
     document.getElementById('cartBackdrop').addEventListener('click', function(){ setCartOpen(false); });
+    // tasto "Vai/Fatto" del tastierino del telefono: passa al campo dopo, e sull'ultimo conferma il prelievo
+    var goNext = function(nextId){
+      return function(e){ if (e.key !== 'Enter') return; e.preventDefault(); var el = document.getElementById(nextId); if (el) el.focus(); };
+    };
+    document.getElementById('fldOperatore').addEventListener('keydown', goNext('fldOdl'));
+    document.getElementById('fldOdl').addEventListener('keydown', goNext('fldMacchina'));
+    document.getElementById('fldMacchina').addEventListener('keydown', function(e){
+      if (e.key !== 'Enter') return; e.preventDefault(); document.getElementById('btnConfermaPrelievo').click();
+    });
     renderCart();
   }
 
@@ -1265,7 +1274,7 @@
         ' &middot; Disponibili: <b>' + fmtNum(avail) + ' ' + esc(item.um) + '</b>' + (already ? ' (già ' + fmtNum(already) + ' nel carrello)' : '') + '</p>' +
       (item.note ? '<p class="sub">Nota: ' + esc(item.note) + '</p>' : '') +
       '<div class="modal-fields">' +
-        '<div class="field"><label>Quantità da prelevare' + (item.um ? ' (' + esc(item.um) + ')' : '') + ' *</label><input class="input" id="modalQty" type="text" inputmode="decimal" value="1"></div>' +
+        '<div class="field"><label>Quantità da prelevare' + (item.um ? ' (' + esc(item.um) + ')' : '') + ' *</label><input class="input" id="modalQty" type="text" inputmode="decimal" enterkeyhint="done" value="1"></div>' +
         '<div class="field"><label>Nota (opzionale)</label><textarea class="input" id="modalNote" placeholder="Annotazione per questa riga"></textarea></div>' +
       '</div>' +
       '<div class="modal-actions">' +
@@ -1274,6 +1283,11 @@
       '</div>';
     var overlay = openModal(html);
     overlay.querySelector('#modalCancel').addEventListener('click', closeModal);
+    // sul tastierino numerico del telefono il tasto "Vai/Fatto" invia Enter: senza questo listener
+    // sembrava che il tasto non facesse nulla (il vero pulsante restava nascosto sotto la tastiera).
+    overlay.querySelector('#modalQty').addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); overlay.querySelector('#modalConfirm').click(); }
+    });
     overlay.querySelector('#modalConfirm').addEventListener('click', function(){
       var qty = parseQty(overlay.querySelector('#modalQty').value);
       var note = overlay.querySelector('#modalNote').value.trim();
