@@ -669,7 +669,7 @@
           <thead>
             <tr>
               <th>Materiale</th><th>Descrizione</th><th>Divisione</th><th>Magazzino</th><th>U.M.</th>
-              <th>Quantità</th><th>Soglia</th><th>Ubicazione</th><th>Note</th><th></th>
+              <th>Quantità</th><th>Soglia</th><th>Ubicazione</th><th>Note</th>
             </tr>
           </thead>
           <tbody id="inventarioTbody"></tbody>
@@ -1265,7 +1265,7 @@
         ' &middot; Disponibili: <b>' + fmtNum(avail) + ' ' + esc(item.um) + '</b>' + (already ? ' (già ' + fmtNum(already) + ' nel carrello)' : '') + '</p>' +
       (item.note ? '<p class="sub">Nota: ' + esc(item.note) + '</p>' : '') +
       '<div class="modal-fields">' +
-        '<div class="field"><label>Quantità da prelevare' + (item.um ? ' (' + esc(item.um) + ')' : '') + ' *</label><input class="input" id="modalQty" type="number" min="0" step="any" value="1"></div>' +
+        '<div class="field"><label>Quantità da prelevare' + (item.um ? ' (' + esc(item.um) + ')' : '') + ' *</label><input class="input" id="modalQty" type="text" inputmode="decimal" value="1"></div>' +
         '<div class="field"><label>Nota (opzionale)</label><textarea class="input" id="modalNote" placeholder="Annotazione per questa riga"></textarea></div>' +
       '</div>' +
       '<div class="modal-actions">' +
@@ -1652,7 +1652,7 @@
     }).sort(cmpMateriale);
 
     if (rows.length === 0){
-      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><b>' + (all.length ? 'Nessun risultato' : 'Inventario vuoto') + '</b>' + (all.length ? '' : 'Importa il file Excel dalla sezione "Importa dati".') + '</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><b>' + (all.length ? 'Nessun risultato' : 'Inventario vuoto') + '</b>' + (all.length ? '' : 'Importa il file Excel dalla sezione "Importa dati".') + '</div></td></tr>';
       return;
     }
     var total = rows.length;
@@ -1668,14 +1668,10 @@
         '<td class="mono editable-cell c-edit" data-label="Soglia" data-edit="soglia" data-id="' + esc(item.id) + '">' + (typeof item.soglia === 'number' ? fmtNum(item.soglia) : '<span class="cell-muted">predef. ' + fmtNum(settings.sogliaScortaBassa) + '</span>') + '</td>' +
         '<td class="editable-cell c-edit" data-label="Ubicazione" data-edit="ubicazione" data-id="' + esc(item.id) + '">' + (item.ubicazione ? esc(item.ubicazione) : '<span class="cell-muted">+ ubicazione</span>') + '</td>' +
         '<td class="cell-note editable-cell c-edit c-wide" data-label="Note" data-edit="note" data-id="' + esc(item.id) + '">' + (item.note ? esc(item.note) : '<span class="cell-muted">+ nota</span>') + '</td>' +
-        '<td class="c-act"><button class="btn btn-sm" data-hist="' + esc(item.id) + '">Storico</button></td>' +
       '</tr>';
-    }).join('') + (total > INV_LIMIT ? '<tr><td colspan="10" class="cell-muted">Mostrate le prime ' + INV_LIMIT + ' righe di ' + total + ': restringi la ricerca.</td></tr>' : '');
+    }).join('') + (total > INV_LIMIT ? '<tr><td colspan="9" class="cell-muted">Mostrate le prime ' + INV_LIMIT + ' righe di ' + total + ': restringi la ricerca.</td></tr>' : '');
     tbody.querySelectorAll('[data-edit]').forEach(function(cell){
       cell.addEventListener('click', function(){ openEditModal(cell.getAttribute('data-id'), cell.getAttribute('data-edit')); });
-    });
-    tbody.querySelectorAll('[data-hist]').forEach(function(btn){
-      btn.addEventListener('click', function(){ showInventarioHistory(btn.getAttribute('data-hist')); });
     });
   }
 
@@ -1716,7 +1712,7 @@
     var currentVal = (item[field] === undefined || item[field] === null) ? (field === 'quantita' ? 0 : '') : item[field];
     var inputHtml = field === 'note'
       ? '<textarea class="input" id="editVal">' + esc(currentVal) + '</textarea>'
-      : '<input class="input" id="editVal" type="' + (isNumber ? 'number' : 'text') + '"' + (isNumber ? ' step="any" min="0"' : '') +
+      : '<input class="input" id="editVal" type="text"' + (isNumber ? ' inputmode="decimal"' : '') +
         (isSoglia ? ' placeholder="vuoto = soglia predefinita (' + fmtNum(settings.sogliaScortaBassa) + ')"' : '') + ' value="' + esc(currentVal) + '">';
     var html = '<h3>Modifica ' + labels[field] + '</h3>' +
       '<p class="sub mono">' + esc(matOf(item)) + ' &middot; ' + esc(item.descrizione) + '</p>' +
