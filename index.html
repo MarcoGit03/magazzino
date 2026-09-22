@@ -1279,6 +1279,7 @@
       var note = overlay.querySelector('#modalNote').value.trim();
       if (qty === null || qty <= 0){ toast('Inserisci una quantità valida', 'err'); return; }
       if (qty > avail){ toast('Quantità superiore alla disponibilità (' + fmtNum(avail) + ')', 'err'); return; }
+      var eraVuoto = cart.length === 0;
       cart.push({
         itemId: item.id, materiale: matOf(item), descrizione: item.descrizione || '',
         divisione: item.divisione || '', magazzino: item.magazzino || '', um: item.um || '',
@@ -1287,6 +1288,9 @@
       renderCart();
       closeModal();
       toast('Aggiunto al carrello', 'ok');
+      // su telefono/tablet il carrello è un pannello a scorrimento: al primo articolo lo apriamo subito,
+      // così Operatore/ODL/Macchina si vedono senza dover cercare e toccare la barra in basso.
+      if (eraVuoto) setCartOpen(true);
     });
     overlay.querySelector('#modalQty').focus();
   }
